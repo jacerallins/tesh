@@ -42,9 +42,18 @@ export function App(): ReactElement {
   const [conversationTimeout, setConversationTimeout] = useState(readConversationTimeout);
   const conversationId = useRef<string | undefined>(undefined);
   const handledTranscript = useRef('');
+  const processingTranscript = useRef<string | undefined>(undefined);
+  const conversationStartPromise = useRef<Promise<string> | undefined>(undefined);
   const timeoutController = useRef<ConversationTimeoutController | undefined>(undefined);
 
-  if (!timeoutController.current) timeoutController.current = new ConversationTimeoutController(() => { visualState.reset(); window.tesh?.assistant.hide(); });
+  if (!timeoutController.current) timeoutController.current = new ConversationTimeoutController(() => {
+    visualState.reset();
+    window.tesh?.assistant.hide();
+    conversationId.current = undefined;
+    handledTranscript.current = '';
+    processingTranscript.current = undefined;
+    conversationStartPromise.current = undefined;
+  });
   useEffect(() => () => timeoutController.current?.dispose(), []);
   useEffect(() => {
     timeoutController.current?.updateTimeout(conversationTimeout);
@@ -74,26 +83,36 @@ export function App(): ReactElement {
   useEffect(() => { if (visualState.state === 'listening') window.tesh?.assistant.show(); }, [visualState.state]);
 
   useEffect(() => {
-    const transcript = visualState.voiceSnapshot.finalTranscript;
+    const transcript = visualState.voiceSnapshot.finalTranscript.trim();
     const conversation = window.tesh?.conversation;
-    if (visualState.voiceSnapshot.microphoneTest || !transcript || transcript === handledTranscript.current || !conversation) return;
+    if (visualState.voiceSnapshot.microphoneTest || !transcript || transcript === handledTranscript.current || processingTranscript.current || !conversation) return;
+
     handledTranscript.current = transcript;
-    void (async () => {
-      conversationId.current ??= (await conversation.start()).conversationId;
-      visualState.beginProcessing('conversation');
-      const result = await conversation.send(conversationId.current, transcript);
-      if (result.status === 'ERROR') {
-        visualState.error(new TeshApplicationError(result.lastError ?? 'AI_REQUEST_FAILED', 'Conversation failed.'));
-        return;
-      }
-      if (result.status === 'AWAITING_CONFIRMATION') {
-        visualState.requestPermission({ id: result.pendingTool?.id ?? 'tool-confirmation', capability: result.pendingTool?.toolId ?? 'tool', requestedAt: Date.now() });
-        return;
-      }
-      const response = result.messages.filter((message) => message.role === 'ASSISTANT').at(-1)?.content;
-      if (response) {
-        visualState.beginThinking();
-        await visualState.voice.speak(response);
+    processingTranscript.current = transcript;
+    void (async (): Promise<void> => {
+      try {
+        conversationStartPromise.current ??= conversation.start().then(({ conversationId: id }) => id);
+        conversationId.current ??= await conversationStartPromise.current;
+        visualState.beginProcessing('conversation');
+        const result = await conversation.send(conversationId.current, transcript);
+        if (result.status === 'ERROR') {
+          visualState.error(new TeshApplicationError(result.lastError ?? 'AI_REQUEST_FAILED', 'Conversation failed.'));
+          return;
+        }
+        if (result.status === 'AWAITING_CONFIRMATION') {
+          visualState.requestPermission({ id: result.pendingTool?.id ?? 'tool-confirmation', capability: result.pendingTool?.toolId ?? 'tool', requestedAt: Date.now() });
+          return;
+        }
+        const response = result.messages.filter((message) => message.role === 'ASSISTANT').at(-1)?.content;
+        if (response) {
+          visualState.beginThinking();
+          await visualState.voice.speak(response);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Conversation failed.';
+        visualState.error(new TeshApplicationError('AI_REQUEST_FAILED', message));
+      } finally {
+        if (processingTranscript.current === transcript) processingTranscript.current = undefined;
       }
     })();
   }, [visualState.voiceSnapshot.finalTranscript, visualState.voice, visualState]);
