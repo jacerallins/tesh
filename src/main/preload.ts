@@ -1,6 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { TeshBridge } from '../shared/types';
 
+const voiceBridge = {
+  getStatus: () => ipcRenderer.invoke('voice:native-status'),
+  start: (phrase: string) => ipcRenderer.invoke('voice:wake-start', phrase),
+  stop: () => ipcRenderer.invoke('voice:wake-stop'),
+  sendAudio: (samples: ArrayBuffer, sampleRate: number) => ipcRenderer.invoke('voice:wake-audio', samples, sampleRate),
+  onDetected: (callback: () => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on('voice:wake-detected', listener);
+    return () => ipcRenderer.removeListener('voice:wake-detected', listener);
+  }
+};
+
 const bridge: TeshBridge = {
   getRuntimeStatus: () => ipcRenderer.invoke('runtime:get-status'),
   assistant: {
@@ -11,6 +23,7 @@ const bridge: TeshBridge = {
     onPause: (callback) => { const listener = (_event: Electron.IpcRendererEvent, paused: boolean): void => callback(paused); ipcRenderer.on('assistant:voice-pause', listener); return () => ipcRenderer.removeListener('assistant:voice-pause', listener); },
     onState: (callback) => { const listener = (_event: Electron.IpcRendererEvent, value: { state: string; amplitude: number }): void => callback(value); ipcRenderer.on('assistant:state', listener); return () => ipcRenderer.removeListener('assistant:state', listener); }
   },
+  voice: voiceBridge,
   memory: {
     create: (input) => ipcRenderer.invoke('memory:create', input),
     get: (id) => ipcRenderer.invoke('memory:get', id),
@@ -19,8 +32,8 @@ const bridge: TeshBridge = {
     list: (options) => ipcRenderer.invoke('memory:list', options),
     search: (options) => ipcRenderer.invoke('memory:search', options),
     archive: (id) => ipcRenderer.invoke('memory:archive', id),
-    restore: (id) => ipcRenderer.invoke('memory:restore', id)
-    ,intelligence: {
+    restore: (id) => ipcRenderer.invoke('memory:restore', id),
+    intelligence: {
       createCandidate: (input, privacy) => ipcRenderer.invoke('memory:candidate-create', input, privacy),
       listCandidates: () => ipcRenderer.invoke('memory:candidates'),
       approveCandidate: (id) => ipcRenderer.invoke('memory:candidate-approve', id),
