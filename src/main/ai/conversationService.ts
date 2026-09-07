@@ -27,34 +27,22 @@ export class ConversationService implements AIConversationBridge {
       const response = await this.provider.generate(buildContext(conversation.messages, TESH_SYSTEM_PROMPT, memoryContext), [...toolDefinitions], controller.signal);
       conversation.lastLatencyMs = Date.now() - started;
       if (!response.toolRequest) return this.completeResponse(conversation, response.content);
-
       const request: ToolRequest = { id: randomUUID(), toolId: response.toolRequest.toolId, input: response.toolRequest.input };
       const result = await this.tools.execute(request);
       conversation.pendingTool = result.status === 'REQUIRES_CONFIRMATION' ? request : undefined;
       conversation.lastToolResult = result;
-      if (result.status === 'REQUIRES_CONFIRMATION') {
-        conversation.status = 'AWAITING_CONFIRMATION';
-        return conversation;
-      }
+      if (result.status === 'REQUIRES_CONFIRMATION') { conversation.status = 'AWAITING_CONFIRMATION'; return conversation; }
       conversation.messages.push({ id: randomUUID(), role: 'TOOL', content: result.content, timestamp: new Date().toISOString(), toolCallId: request.id, toolName: request.toolId });
-      if (result.status !== 'SUCCESS') {
-        conversation.status = 'IDLE';
-        return conversation;
-      }
-
+      if (result.status !== 'SUCCESS') { conversation.status = 'IDLE'; return conversation; }
       const followUp = await this.provider.generate(buildContext(conversation.messages, TESH_SYSTEM_PROMPT, memoryContext), [...toolDefinitions], controller.signal);
-      if (followUp.toolRequest) {
-        conversation.status = 'ERROR';
-        conversation.lastError = 'AI_INVALID_RESPONSE';
-        return conversation;
-      }
+      if (followUp.toolRequest) { conversation.status = 'ERROR'; conversation.lastError = 'AI_INVALID_RESPONSE'; return conversation; }
       return this.completeResponse(conversation, followUp.content);
     } catch (error) { const providerError = error as AIProviderError; conversation.status = 'ERROR'; conversation.lastError = providerError.code ?? 'AI_REQUEST_FAILED'; return conversation; } finally { this.controllers.delete(conversationId); this.busyConversations.delete(conversationId); }
   }
   async cancel(conversationId: string): Promise<void> { this.controllers.get(conversationId)?.abort(); this.provider.cancel(); const conversation = this.get(conversationId); conversation.status = 'ERROR'; conversation.lastError = 'AI_CANCELLED'; }
   async confirmTool(conversationId: string, requestId: string, approved: boolean): Promise<ConversationSnapshot> { const conversation = this.get(conversationId); const request = conversation.pendingTool; if (!request || request.id !== requestId) throw new Error('Tool confirmation is invalid.'); if (!approved) { conversation.pendingTool = undefined; conversation.status = 'IDLE'; conversation.lastToolResult = { requestId, toolId: request.toolId, status: 'DENIED', content: 'User did not approve the tool request.', authorizationResult: 'DENIED', confirmationRequired: true }; return conversation; } const result = await this.tools.execute(request, true); conversation.pendingTool = undefined; conversation.lastToolResult = result; conversation.status = 'IDLE'; conversation.messages.push({ id: randomUUID(), role: 'TOOL', content: result.content, timestamp: new Date().toISOString(), toolCallId: request.id, toolName: request.toolId }); return conversation; }
-  async getConfig(): Promise<AIProviderConfig> { return { ...aiConfig }; }
-  async getStatus(): Promise<{ configured: boolean; provider: string; model: string }> { return { configured: Boolean(process.env.TESH_AI_API_KEY), provider: this.provider.name, model: this.provider.config.model }; }
+  async getConfig(): Promise<AIProviderConfig> { return { ...this.provider.config, ...aiConfig, provider: this.provider.config.provider }; }
+  async getStatus(): Promise<{ configured: boolean; provider: string; model: string }> { return { configured: this.provider.configured ?? Boolean(process.env.TESH_AI_API_KEY), provider: this.provider.name, model: this.provider.config.model }; }
   private completeResponse(conversation: ConversationSnapshot, content: string): ConversationSnapshot { conversation.messages.push({ id: randomUUID(), role: 'ASSISTANT', content, timestamp: new Date().toISOString() }); conversation.status = 'IDLE'; return conversation; }
   private get(id: string): ConversationSnapshot { const conversation = this.conversations.get(id); if (!conversation) throw new Error('Conversation was not found.'); return conversation; }
 }
