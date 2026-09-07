@@ -33,6 +33,20 @@ describe('ConversationService', () => {
     expect(result.messages.map((message) => message.role)).toEqual(['USER', 'ASSISTANT']);
   });
 
+  it('rejects overlapping sends for the same conversation', async () => {
+    const provider = new FakeProvider();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    provider.generate = async () => { await gate; return { content: 'done' }; };
+    const service = new ConversationService(provider, new FakeTools() as unknown as ToolExecutor);
+    const started = await service.start();
+    const first = service.send(started.conversationId, 'First');
+    await expect(service.send(started.conversationId, 'Second')).rejects.toThrow('Conversation is already processing another request.');
+    release();
+    await first;
+    expect((await service.send(started.conversationId, 'Third')).messages.at(-1)?.content).toBe('done');
+  });
+
   it('records cancellation without exposing provider credentials', async () => {
     const provider = new FakeProvider();
     const service = new ConversationService(provider, new FakeTools() as unknown as ToolExecutor);
