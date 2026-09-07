@@ -1,6 +1,6 @@
-import { execFile } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { promisify } from 'node:util';
+import { execFile } from 'node:child_process';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,9 +15,9 @@ export class NativeSpeakerVerificationService {
   isConfigured(): boolean { return Boolean(this.script && this.model && this.profile); }
   isEnrolled(): boolean { return this.isConfigured() && existsSync(this.profile); }
 
-  async enroll(samples = 3): Promise<void> {
+  async enroll(prompt = '', samples = 1): Promise<void> {
     if (!this.isConfigured()) throw new Error('Native speaker verification is not configured. Set TESH_SPEAKER_SCRIPT, TESH_SPEAKER_MODEL and TESH_SPEAKER_PROFILE.');
-    await execFileAsync(this.executable, [this.script, 'enroll', '--model', this.model, '--profile', this.profile, '--samples', String(Math.max(1, Math.min(10, samples)))], { windowsHide: true, timeout: 120000 });
+    await execFileAsync(this.executable, [this.script, 'enroll', '--model', this.model, '--profile', this.profile, '--samples', String(Math.max(1, Math.min(10, samples))), ...(prompt ? ['--prompt', prompt] : [])], { windowsHide: true, timeout: 120000 });
   }
 
   async verify(): Promise<NativeSpeakerAttempt> {
@@ -32,7 +32,5 @@ export class NativeSpeakerVerificationService {
     }
   }
 
-  clearEnrollment(): void {
-    if (this.profile && existsSync(this.profile)) rmSync(this.profile, { force: true });
-  }
+  clearEnrollment(): void { if (this.profile && existsSync(this.profile)) rmSync(this.profile, { force: true }); }
 }
