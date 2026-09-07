@@ -1,0 +1,23 @@
+name: Tesh
+options:
+  bundleIdPrefix: com.tesh
+  deploymentTarget:
+    iOS: '17.0'
+targets:
+  Tesh:
+    type: application
+    platform: iOS
+    sources:
+      - TeshApp.swift
+      - TeshAppModel.swift
+      - ContentView.swift
+      - PairingView.swift
+      - TeshCompanionClient.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tesh.ios
+        SWIFT_VERSION: 5.9
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Tesh uses your microphone for voice interaction when you enable it.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Tesh uses the local network to securely connect to your trusted Tesh desktop.
+    scheme:
+      testTargets: []
