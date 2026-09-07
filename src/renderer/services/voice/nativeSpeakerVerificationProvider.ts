@@ -8,7 +8,7 @@ export class NativeSpeakerVerificationProvider implements SpeakerVerificationPro
   async enroll(_samples: readonly unknown[]): Promise<PrimaryUserIdentity> {
     const bridge = window.tesh?.voice;
     if (!bridge) throw new Error('Native speaker verification bridge is unavailable.');
-    await bridge.enrollSpeaker(3);
+    await bridge.enrollSpeaker('', 3);
     this.enrolled = true;
     const now = new Date().toISOString();
     return { id: 'primary-user', displayName: 'Primary user', enrollmentStatus: 'ENROLLED', createdAt: now, updatedAt: now, verificationVersion: 'sherpa-onnx-v1' };
