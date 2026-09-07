@@ -15,9 +15,11 @@ export class NativeSpeakerVerificationService {
   isConfigured(): boolean { return Boolean(this.script && this.model && this.profile); }
   isEnrolled(): boolean { return this.isConfigured() && existsSync(this.profile); }
 
-  async enroll(prompt = '', samples = 1): Promise<void> {
+  async enroll(promptOrSamples: string | number = '', samples = 1): Promise<void> {
     if (!this.isConfigured()) throw new Error('Native speaker verification is not configured. Set TESH_SPEAKER_SCRIPT, TESH_SPEAKER_MODEL and TESH_SPEAKER_PROFILE.');
-    await execFileAsync(this.executable, [this.script, 'enroll', '--model', this.model, '--profile', this.profile, '--samples', String(Math.max(1, Math.min(10, samples))), ...(prompt ? ['--prompt', prompt] : [])], { windowsHide: true, timeout: 120000 });
+    const prompt = typeof promptOrSamples === 'string' ? promptOrSamples : '';
+    const count = typeof promptOrSamples === 'number' ? promptOrSamples : samples;
+    await execFileAsync(this.executable, [this.script, 'enroll', '--model', this.model, '--profile', this.profile, '--samples', String(Math.max(1, Math.min(10, count))), ...(prompt ? ['--prompt', prompt] : [])], { windowsHide: true, timeout: 120000 });
   }
 
   async verify(): Promise<NativeSpeakerAttempt> {
