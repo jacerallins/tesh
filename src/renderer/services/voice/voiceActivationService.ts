@@ -1,8 +1,8 @@
 import type { TeshInteractionEngine } from '../../engine/teshInteractionEngine';
-import { TeshApplicationError } from '../../engine/teshInteractionTypes';
 import type { VoiceController } from './voiceController';
 import type { WakeWordService } from './wakeWordService';
 import type { SpeakerVerificationProvider, VerificationConfiguration, VerificationResult, VerifiedSession } from '../../../shared/voice';
+import { VoiceError } from '../../../shared/voice';
 
 export interface ActivationSnapshot {
   phase: 'IDLE' | 'WAKE_DETECTED' | 'VERIFYING' | 'LISTENING' | 'BACKOFF';
@@ -28,8 +28,21 @@ export class VoiceActivationService {
   get wakePhrase(): string { return this.wake.phrase; }
   getSnapshot(): ActivationSnapshot { return this.snapshot; }
   subscribe(listener: Listener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  async start(): Promise<void> { await this.wake.start(); this.wakeUnsubscribe = this.wake.onWakeDetected(() => { void this.handleWakeDetected(); }); }
-  async stop(): Promise<void> { this.wakeUnsubscribe?.(); this.wakeUnsubscribe = undefined; await this.wake.stop(); await this.voice.stopListening(); this.clearSession(); this.listeners.clear(); }
+  async start(): Promise<void> {
+    try {
+      await this.wake.start();
+      this.wakeUnsubscribe?.();
+      this.wakeUnsubscribe = this.wake.onWakeDetected(() => { void this.handleWakeDetected(); });
+    } catch (error) {
+      if (error instanceof VoiceError && error.code === 'WAKE_WORD_UNAVAILABLE') {
+        this.snapshot = { ...this.snapshot, phase: 'IDLE', lastResult: 'VERIFICATION_UNAVAILABLE' };
+        this.notify();
+        return;
+      }
+      throw error;
+    }
+  }
+  async stop(): Promise<void> { this.wakeUnsubscribe?.(); this.wakeUnsubscribe = undefined; await this.wake.stop(); await this.voice.stopListening(); this.clearSession(); }
   async handleWakeDetected(): Promise<void> {
     if (this.snapshot.phase === 'VERIFYING' || this.snapshot.phase === 'LISTENING' || Date.now() < this.backoffUntil) return;
     this.snapshot = { ...this.snapshot, phase: 'WAKE_DETECTED' }; this.notify();
