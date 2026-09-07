@@ -1,0 +1,10 @@
+import { useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
+import type { PermissionGrant } from '../../../shared/permissionTypes';
+export function ControlCenterPanel(): ReactElement {
+  const [permissions, setPermissions] = useState<PermissionGrant[]>([]);
+  const [devices, setDevices] = useState<Array<{ id:string; name:string; platform:string; status:string; permissions:string[] }>>([]);
+  const refresh = async (): Promise<void> => { const bridge = window.tesh; if (!bridge) return; setPermissions(await bridge.permissions.listPermissions()); const snapshot = await bridge.companion?.getSnapshot(); setDevices((snapshot?.devices ?? []).map(d => ({ id:d.id,name:d.name,platform:d.platform,status:d.status,permissions:d.permissions }))); };
+  useEffect(() => { void refresh(); }, []);
+  return <section className="control-center" aria-label="Tesh control center"><div className="control-center-header"><div><span className="panel-label">TESH CONTROL CENTER</span><h2>Devices &amp; access</h2><p className="settings-lead">See what Tesh can access and which trusted devices are connected.</p></div><button type="button" onClick={() => void refresh()}>Refresh</button></div><div className="control-grid"><article className="capability-status"><strong>Permissions</strong><span>{permissions.length} configured</span><p>Permissions can be granted, denied, or revoked individually.</p></article><article className="capability-status"><strong>Trusted devices</strong><span>{devices.filter(d => d.status === 'CONNECTED').length} connected / {devices.length} paired</span><p>Every companion device starts with minimal access.</p></article></div><div className="device-list">{devices.map(device => <article className="permission-item" key={device.id}><strong>{device.name}</strong><span>{device.platform} · {device.status}</span><span>{device.permissions.join(', ') || 'COMPANION_VIEW_STATUS'}</span></article>)}{devices.length === 0 ? <p className="settings-lead">No companion devices paired.</p> : null}</div></section>;
+}
