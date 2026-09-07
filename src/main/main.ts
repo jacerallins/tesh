@@ -10,8 +10,8 @@ import { registerPermissionIpc } from './permissions/permissionIpc';
 import { FileService } from './system/fileService';
 import { SystemService } from './system/systemService';
 import { registerSystemIpc } from './system/systemIpc';
-import { OpenAICompatibleProvider } from './ai/aiProvider';
 import { aiConfig } from './ai/aiConfig';
+import { AIRouter } from './ai/aiRouter';
 import { ConversationService } from './ai/conversationService';
 import { ToolExecutor } from './ai/toolExecutor';
 import { registerConversationIpc } from './ai/conversationIpc';
@@ -94,11 +94,7 @@ function createTray(): void {
   tray.on('double-click', () => { dashboardWindow?.show(); dashboardWindow?.focus(); });
 }
 
-ipcMain.handle('runtime:get-status', () => ({
-  platform: process.platform,
-  appVersion: app.getVersion(),
-  isPackaged: app.isPackaged
-}));
+ipcMain.handle('runtime:get-status', () => ({ platform: process.platform, appVersion: app.getVersion(), isPackaged: app.isPackaged }));
 ipcMain.handle('assistant:show', () => showAssistant());
 ipcMain.handle('assistant:hide', () => hideAssistant());
 ipcMain.handle('assistant:update-state', (_event, value: { state: string; amplitude: number }) => { latestAssistantState = value; overlayWindow?.webContents.send('assistant:state', value); if (assistantActive && value.state === 'idle') setTimeout(hideAssistant, 900); });
@@ -110,16 +106,15 @@ app.whenReady().then(() => {
   const diagnostics = new DiagnosticsService(audit);
   const memoryService = new MemoryService(new MemoryRepository(memoryDatabase.connection), (event, memoryId) => { audit.record(event, memoryId); });
   registerMemoryIpc(memoryService);
-  const permissionService = new PermissionService(new PermissionRepository(memoryDatabase.connection), (event, permissionId) => {
-    audit.record(event, permissionId);
-  });
+  const permissionService = new PermissionService(new PermissionRepository(memoryDatabase.connection), (event, permissionId) => { audit.record(event, permissionId); });
   registerPermissionIpc(permissionService);
   registerSystemIpc(new FileService(permissionService, () => developmentVerifiedSession, (event, resource) => audit.record(event, resource)), new SystemService(app.getVersion(), permissionService, () => developmentVerifiedSession, (event) => audit.record(event)), (verified) => { if (isDevelopment) developmentVerifiedSession = verified; });
   const files = new FileService(permissionService, () => developmentVerifiedSession, (event, resource) => audit.record(event, resource));
   const system = new SystemService(app.getVersion(), permissionService, () => developmentVerifiedSession, (event) => audit.record(event));
   const memoryIntelligence = new MemoryIntelligenceService(memoryDatabase.connection, memoryService, permissionService, (event) => audit.record(event));
   const communication = new CommunicationService(new MockCommunicationProvider(), permissionService, () => developmentVerifiedSession, (event) => audit.record(event));
-  registerConversationIpc(new ConversationService(new OpenAICompatibleProvider(aiConfig, process.env.TESH_AI_API_KEY, () => diagnostics.shouldFail('AI')), new ToolExecutor(files, system, communication), async (query) => {
+  const aiProvider = new AIRouter(aiConfig, process.env.TESH_AI_API_KEY, () => diagnostics.shouldFail('AI'));
+  registerConversationIpc(new ConversationService(aiProvider, new ToolExecutor(files, system, communication), async (query) => {
     if (diagnostics.shouldFail('MEMORY')) throw new Error('Development memory failure.');
     return memoryIntelligence.retrieveRelevant(query);
   }));
@@ -135,18 +130,8 @@ app.whenReady().then(() => {
   createTray();
   createDashboardWindow();
   if (isDevelopment) globalShortcut.register('CommandOrControl+Shift+Space', () => { showAssistant(); dashboardWindow?.webContents.send('assistant:activate'); });
-
-  app.on('activate', () => {
-    dashboardWindow?.show();
-  });
+  app.on('activate', () => { dashboardWindow?.show(); });
 });
 
-app.on('will-quit', () => {
-  quitting = true;
-  globalShortcut.unregisterAll();
-  tray?.destroy();
-  memoryDatabase?.close();
-});
-
-app.on('window-all-closed', () => {
-});
+app.on('will-quit', () => { quitting = true; globalShortcut.unregisterAll(); tray?.destroy(); memoryDatabase?.close(); });
+app.on('window-all-closed', () => {});
