@@ -1,4 +1,4 @@
-import { VoiceError, type EnrollmentStatus, type PrimaryUserIdentity, type SpeakerVerificationProvider, type VerificationAttempt } from '../../../shared/voice';
+import type { EnrollmentStatus, PrimaryUserIdentity, SpeakerVerificationProvider, VerificationAttempt } from '../../../shared/voice';
 
 /**
  * Safe production boundary until a real biometric implementation is installed.
@@ -9,7 +9,7 @@ export class ProductionSpeakerVerificationProvider implements SpeakerVerificatio
   readonly isMock = false;
 
   async enroll(_samples: readonly unknown[]): Promise<PrimaryUserIdentity> {
-    throw new VoiceError('VERIFICATION_UNAVAILABLE' as never, 'Production speaker verification is not configured.');
+    throw new Error('Production speaker verification is not configured.');
   }
 
   async verify(): Promise<VerificationAttempt> {
