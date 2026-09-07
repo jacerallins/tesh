@@ -14,16 +14,7 @@ struct PairingView: View {
                 TextField("Host", text: $host).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("Port", text: $port).keyboardType(.numberPad)
                 TextField("Pairing code", text: $code).textInputAutocapitalization(.characters).autocorrectionDisabled()
-                Button("Pair iPhone") {
-                    Task {
-                        do {
-                            try await client.pair(code: code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), host: host, port: UInt16(port) ?? 443, name: model.deviceName)
-                            try await client.authenticate()
-                            model.status = "Paired and authenticated"
-                            message = model.status
-                        } catch { message = error.localizedDescription }
-                    }
-                }
+                Button("Pair iPhone") { Task { do { try await client.pair(code: code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), host: host, port: UInt16(port) ?? 443, name: model.deviceName); try await client.authenticate(); model.client = client; model.status = "Paired and authenticated"; await model.loadRemoteState(); message = model.status } catch { message = error.localizedDescription } } }
             }
             Section("Status") { Text(message) }
         }.navigationTitle("Pair Tesh")
