@@ -7,7 +7,9 @@ import { BrowserSpeechRecognitionProvider } from '../services/voice/speechRecogn
 import { BrowserTTSProvider } from '../services/voice/ttsProvider';
 import { VoiceController } from '../services/voice/voiceController';
 import { DevelopmentSpeakerVerificationProvider } from '../services/voice/speakerVerificationProvider';
+import { ProductionSpeakerVerificationProvider } from '../services/voice/productionSpeakerVerificationProvider';
 import { DevelopmentWakeWordProvider, WakeWordService } from '../services/voice/wakeWordService';
+import { ProductionWakeWordProvider } from '../services/voice/productionWakeWordProvider';
 import { VoiceActivationService } from '../services/voice/voiceActivationService';
 
 export interface TeshVisualStateController {
@@ -46,7 +48,11 @@ export function useTeshVisualState(initialState: TeshVisualState = 'idle'): Tesh
   const context = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const [voice] = useState(() => new VoiceController(engine, new MicrophoneService(() => window.tesh?.permissions), new BrowserSpeechRecognitionProvider(), new BrowserTTSProvider()));
   const voiceSnapshot = useSyncExternalStore((listener) => voice.subscribe(listener), () => voice.getSnapshot(), () => voice.getSnapshot());
-  const [activation] = useState(() => new VoiceActivationService(engine, voice, new WakeWordService(new DevelopmentWakeWordProvider('Tesh Pineapples')), new DevelopmentSpeakerVerificationProvider()));
+  const [activation] = useState(() => {
+    const wakeProvider = import.meta.env.DEV ? new DevelopmentWakeWordProvider('Tesh Pineapples') : new ProductionWakeWordProvider('Tesh Pineapples');
+    const speakerProvider = import.meta.env.DEV ? new DevelopmentSpeakerVerificationProvider() : new ProductionSpeakerVerificationProvider();
+    return new VoiceActivationService(engine, voice, new WakeWordService(wakeProvider), speakerProvider);
+  });
   const activationSnapshot = useSyncExternalStore((listener) => activation.subscribe(listener), () => activation.getSnapshot(), () => activation.getSnapshot());
   useEffect(() => {
     const cleanup = (): void => { void activation.stop(); void voice.dispose(); };
