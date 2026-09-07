@@ -16,13 +16,13 @@ class FakeRecognition {
 }
 
 let instance: FakeRecognition | undefined;
-const Constructor = vi.fn(() => { instance = new FakeRecognition(); return instance; });
+class FakeRecognitionConstructor extends FakeRecognition { constructor() { super(); instance = this; } }
 
 afterEach(() => { vi.unstubAllGlobals(); instance = undefined; vi.clearAllMocks(); });
 
 describe('BrowserSpeechRecognitionProvider', () => {
   it('emits interim and final recognition results', async () => {
-    vi.stubGlobal('window', { SpeechRecognition: Constructor });
+    vi.stubGlobal('window', { SpeechRecognition: FakeRecognitionConstructor });
     const provider = new BrowserSpeechRecognitionProvider('en-US');
     const interim = vi.fn();
     const final = vi.fn();
@@ -41,7 +41,7 @@ describe('BrowserSpeechRecognitionProvider', () => {
   });
 
   it('does not let a stale recognition end event clear a newer session', async () => {
-    vi.stubGlobal('window', { SpeechRecognition: Constructor });
+    vi.stubGlobal('window', { SpeechRecognition: FakeRecognitionConstructor });
     const provider = new BrowserSpeechRecognitionProvider();
     await provider.start();
     const first = instance!;
