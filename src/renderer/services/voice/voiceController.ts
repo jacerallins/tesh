@@ -11,12 +11,13 @@ export interface VoiceSnapshot {
   tts: 'idle' | 'speaking' | 'error';
   interimTranscript: string;
   finalTranscript: string;
+  finalTranscriptVersion: number;
   error?: VoiceError;
 }
 type Listener = () => void;
 
 export class VoiceController {
-  private snapshot: VoiceSnapshot = { microphone: 'inactive', audio: { amplitude: 0, active: false }, microphoneTest: false, recognition: 'idle', tts: 'idle', interimTranscript: '', finalTranscript: '' };
+  private snapshot: VoiceSnapshot = { microphone: 'inactive', audio: { amplitude: 0, active: false }, microphoneTest: false, recognition: 'idle', tts: 'idle', interimTranscript: '', finalTranscript: '', finalTranscriptVersion: 0 };
   private readonly listeners = new Set<Listener>();
   private readonly unsubscribers: Array<() => void>;
 
@@ -33,7 +34,7 @@ export class VoiceController {
         this.notify();
       }),
       recognition.onFinalResult((transcript) => {
-        this.snapshot = { ...this.snapshot, finalTranscript: transcript, interimTranscript: '', recognition: 'idle' };
+        this.snapshot = { ...this.snapshot, finalTranscript: transcript, finalTranscriptVersion: this.snapshot.finalTranscriptVersion + 1, interimTranscript: '', recognition: 'idle' };
         this.notify();
         if (!this.snapshot.microphoneTest) this.finishListening(transcript);
       }),
