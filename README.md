@@ -22,36 +22,41 @@ The native voice path uses:
 - sherpa-onnx speaker embeddings for local voice enrollment and verification.
 - A persistent local voice profile referenced by `TESH_SPEAKER_PROFILE`.
 
-openWakeWord consumes 16 kHz PCM audio frames for streaming wake-word inference, and custom wake-word models can be supplied by path. citeturn805889search1turn805889search0
-
-sherpa-onnx exposes speaker embedding extraction plus enrollment/search/verification through its speaker embedding APIs. citeturn484791search0turn484791search1
-
 ### Activation behavior
 
-The configured wake word is **Tesh**. A wake event does not immediately reveal the interface: Tesh first checks the enrolled speaker profile. Only a successful verification creates a verified session and reveals the assistant interface. The same flow is used by development-native testing and production.
+The configured wake word is **Tesh**. A wake event does not reveal the interface immediately. Tesh first verifies the current speaker against the enrolled primary-user profile. Only a successful verification creates a verified session and reveals the assistant interface.
 
-The wake-word model itself must be trained for the word `Tesh`. The app does not pretend a bundled model for another phrase is equivalent. Speaker verification is the second security gate and ties activation to the enrolled primary user.
+### Siri-style voice enrollment
+
+During first-run setup, the native build presents **Teach Tesh your voice**. Tesh displays a short phrase, asks you to read it aloud, records that enrollment sample locally, and moves to the next phrase. After several different phrases, Tesh builds the local speaker profile. The setup cannot finish the native voice setup step until enrollment is complete.
+
+The same enrollment option is available later in Settings → Voice & Wake so the primary voice can be re-enrolled or cleared.
+
+The wake word and speaker identity are separate: the wake word is always **Tesh**, while the enrolled voice determines whether Tesh should respond to that wake word.
+
+The wake-word model itself must be trained for the word `Tesh`; the app does not pretend a model for another phrase is equivalent.
 
 ## Native voice setup
 
 Install the local helper dependencies:
 
 ```powershell
-python -m pip install -r scripts/requirements.txt
+python -m pip install -r tools/voice/requirements.txt
 ```
 
 Configure the native paths using `.env.example`:
 
 ```text
+VITE_TESH_NATIVE_VOICE=true
 VITE_TESH_WAKE_PHRASE=Tesh
-TESH_WAKEWORD_SCRIPT=scripts/tesh_wakeword.py
+TESH_WAKEWORD_SCRIPT=tools/voice/openwakeword_bridge.py
 TESH_WAKEWORD_MODEL=C:\path\to\tesh.onnx
-TESH_SPEAKER_SCRIPT=scripts/tesh_speaker.py
-TESH_SPEAKER_MODEL=C:\path\to\3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx
+TESH_SPEAKER_SCRIPT=tools/voice/speaker_auth.py
+TESH_SPEAKER_MODEL=C:\path\to\speaker-embedding-model.onnx
 TESH_SPEAKER_PROFILE=%LOCALAPPDATA%\Tesh\voice\primary-user.json
 ```
 
-During first-run setup, **Enroll my voice** calls the native enrollment implementation. The native speaker helper records the enrollment samples and stores the derived speaker embedding profile rather than permanent raw recordings. Future verification records a short sample, computes an embedding, and compares it against the enrolled profile locally.
+During first-run setup, each enrollment phrase is sent to the native speaker helper as a one-sample enrollment action. The helper stores derived speaker embeddings rather than permanent raw recordings. Future verification captures a short sample, computes an embedding, and compares it against the enrolled profile locally.
 
 ## AI configuration
 
