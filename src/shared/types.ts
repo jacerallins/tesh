@@ -25,6 +25,7 @@ export interface TeshBridge {
     onPause: (callback: (paused: boolean) => void) => () => void;
     onState: (callback: (state: { state: string; amplitude: number }) => void) => () => void;
   };
+  voice?: import('./voice/nativeTypes').NativeWakeBridge;
   memory: import('./memoryTypes').MemoryBridge;
   permissions: import('./permissionTypes').PermissionBridge;
   system: import('./systemTypes').SystemToolsBridge;

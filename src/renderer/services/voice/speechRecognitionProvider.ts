@@ -1,6 +1,15 @@
 import { VoiceError, type SpeechRecognitionProvider } from '../../../shared/voice';
 
-interface SpeechRecognitionEventLike extends Event { results: { [index: number]: { [index: number]: { transcript: string }; isFinal: boolean } }; resultIndex: number; }
+interface SpeechRecognitionResultLike {
+  readonly isFinal: boolean;
+  readonly [index: number]: { transcript: string };
+}
+
+interface SpeechRecognitionEventLike extends Event {
+  readonly results: { readonly length: number; readonly [index: number]: SpeechRecognitionResultLike };
+  readonly resultIndex: number;
+}
+
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
@@ -12,6 +21,7 @@ interface SpeechRecognitionLike {
   stop(): void;
   abort(): void;
 }
+
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 export class BrowserSpeechRecognitionProvider implements SpeechRecognitionProvider {
@@ -26,9 +36,10 @@ export class BrowserSpeechRecognitionProvider implements SpeechRecognitionProvid
 
   async start(): Promise<void> {
     if (this.recognition) return;
-    const Constructor = (window as Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition
-      ?? (window as Window & { webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition;
+    const browserWindow = window as Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
+    const Constructor = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
     if (!Constructor) throw new VoiceError('SPEECH_RECOGNITION_UNAVAILABLE', 'Speech recognition is unavailable on this platform.');
+
     const recognition = new Constructor();
     recognition.continuous = false;
     recognition.interimResults = true;
@@ -36,22 +47,39 @@ export class BrowserSpeechRecognitionProvider implements SpeechRecognitionProvid
     recognition.onresult = (event) => {
       let interim = '';
       let final = '';
-      for (let index = event.resultIndex; index < Object.keys(event.results).length; index += 1) {
-        const transcript = event.results[index]?.[0]?.transcript ?? '';
-        if (event.results[index]?.isFinal) final += transcript;
+      const end = Math.min(event.results.length, event.resultIndex + 32);
+      for (let index = event.resultIndex; index < end; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript ?? '';
+        if (result?.isFinal) final += transcript;
         else interim += transcript;
       }
       if (final.trim()) this.finalListeners.forEach((listener) => listener(final.trim()));
-      else if (interim.trim()) this.interimListeners.forEach((listener) => listener(interim.trim()));
+      if (interim.trim()) this.interimListeners.forEach((listener) => listener(interim.trim()));
     };
     recognition.onerror = () => this.errorListeners.forEach((listener) => listener(new VoiceError('SPEECH_RECOGNITION_ERROR', 'Speech recognition encountered an error.')));
-    recognition.onend = () => { this.recognition = undefined; };
+    recognition.onend = () => { if (this.recognition === recognition) this.recognition = undefined; };
     this.recognition = recognition;
-    try { recognition.start(); } catch { this.recognition = undefined; throw new VoiceError('SPEECH_RECOGNITION_ERROR', 'Speech recognition could not start.'); }
+    try {
+      recognition.start();
+    } catch {
+      if (this.recognition === recognition) this.recognition = undefined;
+      throw new VoiceError('SPEECH_RECOGNITION_ERROR', 'Speech recognition could not start.');
+    }
   }
 
-  async stop(): Promise<void> { this.recognition?.stop(); this.recognition = undefined; }
-  async cancel(): Promise<void> { this.recognition?.abort(); this.recognition = undefined; }
+  async stop(): Promise<void> {
+    const recognition = this.recognition;
+    this.recognition = undefined;
+    recognition?.stop();
+  }
+
+  async cancel(): Promise<void> {
+    const recognition = this.recognition;
+    this.recognition = undefined;
+    recognition?.abort();
+  }
+
   onInterimResult(callback: (transcript: string) => void): () => void { this.interimListeners.add(callback); return () => this.interimListeners.delete(callback); }
   onFinalResult(callback: (transcript: string) => void): () => void { this.finalListeners.add(callback); return () => this.finalListeners.delete(callback); }
   onError(callback: (error: VoiceError) => void): () => void { this.errorListeners.add(callback); return () => this.errorListeners.delete(callback); }

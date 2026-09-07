@@ -11,21 +11,38 @@ export interface VoiceSnapshot {
   tts: 'idle' | 'speaking' | 'error';
   interimTranscript: string;
   finalTranscript: string;
+  finalTranscriptVersion: number;
   error?: VoiceError;
 }
 type Listener = () => void;
 
 export class VoiceController {
-  private snapshot: VoiceSnapshot = { microphone: 'inactive', audio: { amplitude: 0, active: false }, microphoneTest: false, recognition: 'idle', tts: 'idle', interimTranscript: '', finalTranscript: '' };
+  private snapshot: VoiceSnapshot = { microphone: 'inactive', audio: { amplitude: 0, active: false }, microphoneTest: false, recognition: 'idle', tts: 'idle', interimTranscript: '', finalTranscript: '', finalTranscriptVersion: 0 };
   private readonly listeners = new Set<Listener>();
   private readonly unsubscribers: Array<() => void>;
 
   constructor(private readonly engine: TeshInteractionEngine, private readonly microphone: MicrophoneService, private readonly recognition: SpeechRecognitionProvider, private readonly tts: TTSProvider) {
     this.unsubscribers = [
-      microphone.subscribe(() => { this.snapshot = { ...this.snapshot, microphone: microphone.getStatus(), audio: microphone.getAudio() }; engine.setAudio(microphone.getAudio()); this.notify(); }),
-      recognition.onInterimResult((transcript) => { this.snapshot = { ...this.snapshot, interimTranscript: transcript }; this.notify(); }),
-      recognition.onFinalResult((transcript) => { this.snapshot = { ...this.snapshot, finalTranscript: transcript, interimTranscript: '', recognition: 'idle' }; this.notify(); if (!this.snapshot.microphoneTest) this.finishListening(transcript); }),
-      recognition.onError((error) => { this.snapshot = { ...this.snapshot, recognition: 'error', error }; this.notify(); void (this.snapshot.microphoneTest ? this.stopTestRecognition() : this.stopListening()); })
+      microphone.subscribe(() => {
+        const audio = microphone.getAudio();
+        this.snapshot = { ...this.snapshot, microphone: microphone.getStatus(), audio };
+        engine.setAudio(audio);
+        this.notify();
+      }),
+      recognition.onInterimResult((transcript) => {
+        this.snapshot = { ...this.snapshot, interimTranscript: transcript };
+        this.notify();
+      }),
+      recognition.onFinalResult((transcript) => {
+        this.snapshot = { ...this.snapshot, finalTranscript: transcript, finalTranscriptVersion: this.snapshot.finalTranscriptVersion + 1, interimTranscript: '', recognition: 'idle' };
+        this.notify();
+        if (!this.snapshot.microphoneTest) this.finishListening(transcript);
+      }),
+      recognition.onError((error) => {
+        this.snapshot = { ...this.snapshot, recognition: 'error', error };
+        this.notify();
+        void (this.snapshot.microphoneTest ? this.stopTestRecognition() : this.stopListening());
+      })
     ];
   }
 
@@ -39,12 +56,13 @@ export class VoiceController {
       await this.microphone.start();
       await this.recognition.start();
       this.engine.activate();
-      this.snapshot = { ...this.snapshot, recognition: 'listening' };
+      this.snapshot = { ...this.snapshot, recognition: 'listening', microphone: 'active', audio: this.microphone.getAudio() };
       this.notify();
     } catch (error) {
+      await this.recognition.stop().catch(() => undefined);
       await this.microphone.stop();
       const voiceError = error instanceof VoiceError ? error : new VoiceError('SPEECH_RECOGNITION_ERROR', 'Listening could not start.');
-      this.snapshot = { ...this.snapshot, error: voiceError, recognition: 'error' };
+      this.snapshot = { ...this.snapshot, error: voiceError, recognition: 'error', microphone: this.microphone.getStatus(), audio: this.microphone.getAudio(), interimTranscript: '' };
       this.notify();
     }
   }
@@ -58,9 +76,9 @@ export class VoiceController {
       await this.microphone.start();
       try {
         await this.recognition.start();
-        this.snapshot = { ...this.snapshot, recognition: 'listening' };
+        this.snapshot = { ...this.snapshot, recognition: 'listening', microphone: 'active', audio: this.microphone.getAudio() };
       } catch (error) {
-        this.snapshot = { ...this.snapshot, recognition: 'idle', error: error instanceof VoiceError ? error : new VoiceError('SPEECH_RECOGNITION_UNAVAILABLE', 'Speech recognition is unavailable on this platform.') };
+        this.snapshot = { ...this.snapshot, recognition: 'idle', microphone: this.microphone.getStatus(), audio: this.microphone.getAudio(), error: error instanceof VoiceError ? error : new VoiceError('SPEECH_RECOGNITION_UNAVAILABLE', 'Speech recognition is unavailable on this platform.') };
       }
       this.notify();
     } catch (error) {
@@ -79,10 +97,10 @@ export class VoiceController {
   }
 
   async stopListening(): Promise<void> {
-    await this.recognition.stop();
+    await this.recognition.stop().catch(() => undefined);
     await this.microphone.stop();
     if (this.engine.getContext().state === 'listening') this.engine.stopListening();
-    this.snapshot = { ...this.snapshot, recognition: 'idle', microphone: 'inactive', audio: this.microphone.getAudio() };
+    this.snapshot = { ...this.snapshot, recognition: 'idle', microphone: this.microphone.getStatus(), audio: this.microphone.getAudio(), interimTranscript: '' };
     this.notify();
   }
 
@@ -103,11 +121,24 @@ export class VoiceController {
     this.notify();
   }
 
-  async stopSpeaking(): Promise<void> { await this.tts.stop(); if (this.engine.getContext().state === 'speaking') this.engine.completeSpeaking(); this.snapshot = { ...this.snapshot, tts: 'idle' }; this.notify(); }
+  async stopSpeaking(): Promise<void> { await this.tts.stop(); if (this.engine.getContext().state === 'speaking') this.engine.completeSpeaking(); this.snapshot = { ...this.snapshot, tts: 'idle', error: undefined }; this.notify(); }
   simulateSpeaking(): void { if (this.engine.getContext().state === 'idle') { this.engine.activate(); this.engine.beginThinking(); } this.engine.beginSpeaking({ amplitude: 0.15 }); this.snapshot = { ...this.snapshot, tts: 'speaking' }; this.notify(); }
   async dispose(): Promise<void> { this.unsubscribers.forEach((unsubscribe) => unsubscribe()); await this.stopMicrophoneTest(); await this.stopListening(); await this.stopSpeaking(); this.listeners.clear(); }
 
-  private async stopTestRecognition(): Promise<void> { if (this.snapshot.recognition !== 'idle') await this.recognition.stop(); this.snapshot = { ...this.snapshot, recognition: 'idle' }; }
-  private finishListening(transcript: string): void { if (this.engine.getContext().state === 'listening') { this.engine.beginThinking(); this.engine.setAudio({ amplitude: 0 }); } this.snapshot = { ...this.snapshot, finalTranscript: transcript }; this.notify(); void this.microphone.stop(); }
+  private async stopTestRecognition(): Promise<void> { if (this.snapshot.recognition !== 'idle') await this.recognition.stop().catch(() => undefined); this.snapshot = { ...this.snapshot, recognition: 'idle', interimTranscript: '' }; }
+  private finishListening(transcript: string): void {
+    if (this.engine.getContext().state === 'listening') {
+      this.engine.beginThinking();
+      this.engine.setAudio({ amplitude: 0 });
+    }
+    this.snapshot = { ...this.snapshot, finalTranscript: transcript, recognition: 'idle', microphone: this.microphone.getStatus(), audio: this.microphone.getAudio(), interimTranscript: '' };
+    this.notify();
+    void this.microphone.stop().then(() => {
+      this.snapshot = { ...this.snapshot, microphone: this.microphone.getStatus(), audio: this.microphone.getAudio() };
+      this.engine.setAudio(this.microphone.getAudio());
+      this.notify();
+    }).catch(() => undefined);
+  }
+
   private notify(): void { this.listeners.forEach((listener) => listener()); }
 }

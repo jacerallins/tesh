@@ -4,7 +4,7 @@ export class DevelopmentSpeakerVerificationProvider implements SpeakerVerificati
   readonly name = 'Development mock';
   readonly isMock = true;
   private identity?: PrimaryUserIdentity;
-  private nextAttempt: VerificationAttempt = { result: 'NOT_VERIFIED', liveness: 'UNAVAILABLE', method: this.name };
+  private nextAttempt: VerificationAttempt = { result: 'VERIFIED', confidence: 1, liveness: 'PASS', method: this.name };
   private sampleCount = 0;
 
   async enroll(samples: readonly unknown[]): Promise<PrimaryUserIdentity> {
