@@ -10,9 +10,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('command', choices=['enroll', 'verify'])
 parser.add_argument('--model', required=True)
 parser.add_argument('--profile', required=True)
-parser.add_argument('--samples', type=int, default=3)
+parser.add_argument('--samples', type=int, default=1)
 parser.add_argument('--seconds', type=float, default=4.0)
 parser.add_argument('--threshold', type=float, default=0.55)
+parser.add_argument('--prompt', default='')
 args = parser.parse_args()
 
 SAMPLE_RATE = 16000
@@ -32,10 +33,16 @@ def extractor():
 
 def capture(seconds: float) -> np.ndarray:
     frames = max(1, int(seconds * SAMPLE_RATE))
+    if args.prompt:
+        print(json.dumps({'event': 'prompt', 'text': args.prompt}), flush=True)
     print('SPEAK', flush=True)
     audio = sd.rec(frames, samplerate=SAMPLE_RATE, channels=1, dtype='float32')
     sd.wait()
-    return np.ascontiguousarray(audio[:, 0])
+    samples = np.ascontiguousarray(audio[:, 0])
+    rms = float(np.sqrt(np.mean(np.square(samples)) + 1e-12))
+    if rms < 0.005:
+        raise RuntimeError('No usable speech was captured. Please speak normally and try again.')
+    return samples
 
 
 def embed(samples: np.ndarray, model) -> np.ndarray:
@@ -58,18 +65,21 @@ profile_path = Path(args.profile)
 profile_path.parent.mkdir(parents=True, exist_ok=True)
 
 if args.command == 'enroll':
-    embeddings = []
+    existing: list[np.ndarray] = []
+    if profile_path.is_file():
+        stored = json.loads(profile_path.read_text(encoding='utf-8'))
+        existing = [normalize(np.asarray(item, dtype=np.float32)) for item in stored.get('embeddings', [])]
     for _ in range(max(1, min(10, args.samples))):
-        embeddings.append(embed(capture(args.seconds), model))
-    average = normalize(np.mean(np.stack(embeddings), axis=0))
-    profile_path.write_text(json.dumps({'version': 1, 'algorithm': 'sherpa-onnx-speaker-embedding', 'embedding': average.tolist()}), encoding='utf-8')
-    print(json.dumps({'enrolled': True}), flush=True)
+        existing.append(embed(capture(args.seconds), model))
+    averaged = normalize(np.mean(np.stack(existing), axis=0))
+    profile_path.write_text(json.dumps({'version': 1, 'algorithm': 'sherpa-onnx-speaker-embedding', 'sample_count': len(existing), 'embedding': averaged.tolist(), 'embeddings': [normalize(item).tolist() for item in existing]}), encoding='utf-8')
+    print(json.dumps({'enrolled': True, 'sample_count': len(existing)}), flush=True)
 else:
     if not profile_path.is_file():
-        print(json.dumps({'verified': False, 'confidence': 0.0}), flush=True)
+        print(json.dumps({'verified': False, 'confidence': 0.0, 'liveness': 'UNAVAILABLE'}), flush=True)
         raise SystemExit(0)
     profile = json.loads(profile_path.read_text(encoding='utf-8'))
     known = normalize(np.asarray(profile['embedding'], dtype=np.float32))
     query = normalize(embed(capture(args.seconds), model))
     similarity = float(np.dot(known, query))
-    print(json.dumps({'verified': similarity >= args.threshold, 'confidence': similarity}), flush=True)
+    print(json.dumps({'verified': similarity >= args.threshold, 'confidence': similarity, 'liveness': 'UNAVAILABLE'}), flush=True)
