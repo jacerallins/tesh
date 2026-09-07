@@ -1,0 +1,14 @@
+import { useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
+import type { DiagnosticsSnapshot, FailureComponent } from '../../../shared/diagnosticsTypes';
+
+const components: readonly FailureComponent[] = ['AI', 'VOICE', 'TTS', 'MEMORY', 'FILESYSTEM', 'COMMUNICATION', 'PERMISSIONS'];
+
+export function DiagnosticsPanel(): ReactElement | null {
+  const bridge = window.tesh?.diagnostics;
+  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>();
+  useEffect(() => { if (!bridge) return; void bridge.getSnapshot().then(setSnapshot); const timer = window.setInterval(() => void bridge.getSnapshot().then(setSnapshot), 1000); return () => window.clearInterval(timer); }, [bridge]);
+  if (!bridge) return null;
+  const toggleFailure = async (component: FailureComponent): Promise<void> => { setSnapshot(await bridge.setFailure(component, !snapshot?.failureInjection[component])); };
+  return <section className="diagnostics-panel" aria-label="Tesh System Diagnostics"><div className="memory-heading"><div><p className="panel-label">Development only</p><h2>Tesh System Diagnostics</h2></div><span>{snapshot?.lastAuditEvent?.event || 'No audit events'}</span></div><div className="diagnostics-grid"><div><span className="panel-label">Interaction</span><strong>{snapshot?.interactionState || 'Loading'}</strong></div><div><span className="panel-label">Verified session</span><strong>{snapshot?.verifiedSession ? 'VERIFIED' : 'UNVERIFIED'}</strong></div><div><span className="panel-label">Conversation</span><strong>{snapshot?.conversationStatus || 'IDLE'}</strong></div><div><span className="panel-label">Voice</span><strong>{snapshot?.voiceState || 'IDLE'}</strong></div><div><span className="panel-label">Memory access</span><strong>{snapshot?.memoryAccess || 'UNKNOWN'}</strong></div><div><span className="panel-label">AI provider</span><strong>{snapshot?.aiProvider || 'UNAVAILABLE'}</strong></div><div><span className="panel-label">Authorization</span><strong>{snapshot?.authorizationResult || 'NONE'}</strong></div><div><span className="panel-label">Confirmation</span><strong>{snapshot?.confirmationState || 'NONE'}</strong></div></div><div className="diagnostics-faults"><span className="panel-label">Failure simulation</span><div className="voice-actions">{components.map((component) => <button key={component} type="button" className={snapshot?.failureInjection[component] ? 'fault-active' : ''} onClick={() => void toggleFailure(component)}>{component}: {snapshot?.failureInjection[component] ? 'ON' : 'OFF'}</button>)}</div></div><div className="diagnostics-audit"><span className="panel-label">Recent audit events</span>{snapshot?.auditEvents.slice(0, 8).map((event) => <div key={event.id}><strong>{event.event}</strong><span>{event.resource || 'system'}</span></div>)}</div></section>;
+}

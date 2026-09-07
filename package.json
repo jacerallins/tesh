@@ -1,0 +1,47 @@
+{
+  "name": "tesh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist-electron/main/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on http://localhost:5173 && npm run build:main && electron . --dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "build:main": "tsc -p tsconfig.node.json",
+    "build": "npm run build:main && vite build",
+    "package:win": "npm run build && electron-builder --win nsis --publish never",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@vitejs/plugin-react": "latest",
+    "better-sqlite3": "^13.0.3",
+    "react": "latest",
+    "react-dom": "latest",
+    "three": "^0.185.1",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "electron": "latest",
+    "concurrently": "latest",
+    "electron-builder": "^26.15.3",
+    "typescript": "latest",
+    "vitest": "latest",
+    "wait-on": "latest",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.tesh.desktop",
+    "productName": "Tesh",
+    "files": ["dist/**", "dist-electron/**", "package.json"],
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  }
+}

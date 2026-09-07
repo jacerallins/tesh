@@ -1,0 +1,10 @@
+export type CommunicationProviderKind = 'MOCK' | 'WHATSAPP' | 'SMS' | 'EMAIL' | 'INSTAGRAM' | 'OTHER';
+export type RecipientResolutionStatus = 'EXACT_MATCH' | 'MULTIPLE_MATCHES' | 'NO_MATCH' | 'AMBIGUOUS';
+export type MessageDraftStatus = 'DRAFT' | 'AWAITING_CONFIRMATION' | 'APPROVED' | 'SENT' | 'CANCELLED' | 'FAILED';
+export interface Contact { id: string; displayName: string; provider: CommunicationProviderKind; providerContactId: string; metadata: Record<string, string>; }
+export interface RecipientResolution { status: RecipientResolutionStatus; query: string; matches: Contact[]; }
+export interface MessageDraft { id: string; recipient: Contact; provider: CommunicationProviderKind; content: string; createdAt: string; updatedAt: string; styleProfileUsed?: string; status: MessageDraftStatus; authorizationResult: string; confirmationRequired: boolean; }
+export interface CreateDraftInput { recipientQuery: string; contactId?: string; content: string; provider?: CommunicationProviderKind; styleProfileUsed?: string; }
+export interface CommunicationSnapshot { provider: CommunicationProviderKind; contacts: Contact[]; resolution?: RecipientResolution; draft?: MessageDraft; sendResult?: string; lastError?: string; }
+export interface CommunicationBridge { getContacts: () => Promise<Contact[]>; resolveRecipient: (query: string) => Promise<RecipientResolution>; createDraft: (input: CreateDraftInput) => Promise<MessageDraft>; updateDraft: (id: string, content: string) => Promise<MessageDraft>; confirmSend: (id: string, approved: boolean) => Promise<MessageDraft>; cancelDraft: (id: string) => Promise<MessageDraft>; getSnapshot: () => Promise<CommunicationSnapshot>; }
+export interface CommunicationProvider { readonly kind: CommunicationProviderKind; getContacts(): Promise<Contact[]>; sendMessage(recipient: Contact, content: string): Promise<{ providerMessageId: string }>; cancelSend(): Promise<void>; }

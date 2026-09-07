@@ -1,0 +1,21 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { initializeMemoryDatabase } from './memoryDatabase';
+import { MemoryRepository } from './memoryRepository';
+import { MemoryService } from './memoryService';
+import { MemoryIntelligenceService } from './memoryIntelligenceService';
+import { PermissionRepository } from '../permissions/permissionRepository';
+import { PermissionService } from '../permissions/permissionService';
+
+describe('MemoryIntelligenceService', () => {
+  const paths: string[] = [];
+  afterEach(() => { paths.splice(0).forEach((databasePath) => { for (const suffix of ['', '-shm', '-wal']) { try { fs.unlinkSync(databasePath + suffix); } catch { } } }); });
+  function setup() { const databasePath = path.join(os.tmpdir(), `tesh-intelligence-${Date.now()}-${Math.random()}.sqlite`); paths.push(databasePath); const database = initializeMemoryDatabase(databasePath); const memoryService = new MemoryService(new MemoryRepository(database.connection)); const permissions = new PermissionService(new PermissionRepository(database.connection)); return { database, memoryService, permissions, intelligence: new MemoryIntelligenceService(database.connection, memoryService, permissions) }; }
+
+  it('keeps AI candidates out of active memory until approval', async () => { const { database, intelligence, memoryService } = setup(); const candidate = await intelligence.createCandidate({ content: 'I prefer concise answers.', category: 'PREFERENCE', importance: 'HIGH', confidence: 0.9, reason: 'Explicit preference pattern.' }); expect(candidate?.status).toBe('CANDIDATE'); expect(memoryService.listMemories()).toHaveLength(0); await intelligence.approveCandidate(candidate!.id); expect(memoryService.listMemories()[0]?.source).toBe('USER_APPROVED'); database.close(); });
+  it('blocks sensitive and do-not-store candidates', async () => { const { database, intelligence } = setup(); expect(await intelligence.createCandidate({ content: 'My password is secret123.', category: 'FACT', importance: 'CRITICAL', confidence: 1, reason: 'conversation' })).toBeNull(); expect(await intelligence.createCandidate({ content: 'Remember this routine.', category: 'ROUTINE', importance: 'NORMAL', confidence: 0.8, reason: 'conversation' }, 'DO_NOT_STORE')).toBeNull(); expect(await intelligence.createCandidate({ content: 'Temporary note.', category: 'FACT', importance: 'NORMAL', confidence: 0.8, reason: 'conversation' }, 'TEMPORARY_CONVERSATION')).toBeNull(); database.close(); });
+  it('requires MEMORY_ACCESS before retrieval and ranks approved memories deterministically', async () => { const { database, intelligence, memoryService, permissions } = setup(); memoryService.createMemory({ content: 'Older project note.', category: 'PROJECT', importance: 'LOW', source: 'CONVERSATION' }); expect(await intelligence.retrieveRelevant('project')).toHaveLength(0); permissions.grantPermission('MEMORY_ACCESS', undefined, 'SESSION'); memoryService.createMemory({ content: 'Project preference.', category: 'PREFERENCE', importance: 'HIGH', source: 'USER_APPROVED' }); const results = await intelligence.retrieveRelevant('project'); expect(results.length).toBeGreaterThan(0); expect(results[0]?.importance).toBe('HIGH'); database.close(); });
+  it('requires approved style profiles and never treats profile fields as diagnoses', async () => { const { database, intelligence } = setup(); await expect(intelligence.createStyleProfile({ source: 'USER_PROVIDED_SAMPLE', approvalState: 'CANDIDATE', formality: 'MEDIUM', verbosity: 'LOW', punctuationStyle: 'periods', emojiUsage: 'NONE', greetingStyle: 'direct', closingStyle: 'brief', humorLevel: 'LOW', commonExpressions: [] })).rejects.toThrow(); const profile = await intelligence.createStyleProfile({ source: 'USER_APPROVED', approvalState: 'APPROVED', formality: 'MEDIUM', verbosity: 'LOW', punctuationStyle: 'periods', emojiUsage: 'NONE', greetingStyle: 'direct', closingStyle: 'brief', humorLevel: 'LOW', commonExpressions: ['thanks'] }); expect((await intelligence.listStyleProfiles())[0]?.id).toBe(profile.id); database.close(); });
+});

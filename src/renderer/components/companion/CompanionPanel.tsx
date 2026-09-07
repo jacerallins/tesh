@@ -1,0 +1,16 @@
+import { useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
+import type { CompanionDevice, CompanionPermission, PairingChallenge } from '../../../shared/companionTypes';
+
+const devicePermissions: readonly CompanionPermission[] = ['COMPANION_VIEW_STATUS', 'COMPANION_SEND_COMMAND', 'COMPANION_RECEIVE_NOTIFICATIONS'];
+export function CompanionPanel(): ReactElement | null {
+  const bridge = window.tesh?.companion;
+  const [devices, setDevices] = useState<CompanionDevice[]>([]);
+  const [pairing, setPairing] = useState<PairingChallenge>();
+  const [error, setError] = useState('');
+  useEffect(() => { if (!bridge) return; const load = async (): Promise<void> => { const snapshot = await bridge.getSnapshot(); setDevices(snapshot.devices); setPairing(snapshot.pairing); }; void load(); const timer = window.setInterval(() => void load(), 1000); return () => window.clearInterval(timer); }, [bridge]);
+  if (!bridge) return null;
+  const createChallenge = async (): Promise<void> => { setError(''); try { setPairing(await bridge.createPairingChallenge()); } catch (value) { setError(value instanceof Error ? value.message : 'Pairing failed.'); } };
+  const updateDevice = (device: CompanionDevice): void => setDevices((current) => current.map((item) => item.id === device.id ? device : item));
+  return <section className="companion-panel" aria-label="Development companion devices"><div className="memory-heading"><div><p className="panel-label">Development only</p><h2>Tesh Companion</h2></div><span>{devices.length} paired · TLS requires explicit certificate configuration</span></div><div className="companion-pairing"><button type="button" onClick={() => void createChallenge()}>Create pairing challenge</button>{pairing ? <div><span className="panel-label">Expires {new Date(pairing.expiresAt).toLocaleTimeString()} · {pairing.challengeId}</span><strong>{pairing.code}</strong></div> : <span>No active challenge</span>}</div>{devices.map((device) => <article className="companion-device" key={device.id}><div><strong>{device.name}</strong><span>{device.platform} · {device.status} · {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : 'never seen'}</span><small>Device ID {device.id}</small><small>Identity {device.publicKey.slice(0, 24)}...</small></div><div className="voice-actions"><button type="button" onClick={() => void bridge.disconnect(device.id).then(() => updateDevice({ ...device, status: 'DISCONNECTED' }))}>Disconnect</button><button type="button" onClick={() => void bridge.revoke(device.id).then(() => updateDevice({ ...device, status: 'REVOKED', revokedAt: new Date().toISOString() }))}>Revoke</button>{devicePermissions.filter((permission) => !device.permissions.includes(permission)).map((permission) => <button key={permission} type="button" onClick={() => void bridge.grantPermission(device.id, permission).then(updateDevice)}>Grant {permission.replace('COMPANION_', '')}</button>)}</div></article>)}<p className="memory-message" aria-live="polite">{error || 'Private keys remain on the companion device. The desktop stores public identity metadata only.'}</p></section>;
+}

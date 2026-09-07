@@ -1,0 +1,10 @@
+export type AIMessageRole = 'SYSTEM' | 'USER' | 'ASSISTANT' | 'TOOL';
+export type AIErrorCode = 'AI_PROVIDER_UNAVAILABLE' | 'AI_AUTHENTICATION_ERROR' | 'AI_RATE_LIMITED' | 'AI_TIMEOUT' | 'AI_INVALID_RESPONSE' | 'AI_REQUEST_FAILED' | 'AI_CANCELLED' | 'AI_CONTEXT_TOO_LARGE' | 'TOOL_NOT_AUTHORIZED' | 'TOOL_REQUIRES_CONFIRMATION' | 'TOOL_EXECUTION_FAILED';
+export interface AIMessage { id: string; role: AIMessageRole; content: string; timestamp: string; toolCallId?: string; toolName?: string; }
+export interface AIProviderConfig { provider: string; model: string; endpoint: string; temperature: number; maxOutputTokens: number; streaming: boolean; timeoutMs: number; }
+export interface ToolDefinition { id: string; name: string; description: string; inputSchema: Record<string, unknown>; requiredCapability: string; riskLevel: 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL'; requiresConfirmation: boolean; }
+export interface ToolRequest { id: string; toolId: string; input: Record<string, unknown>; }
+export interface ToolResult { requestId: string; toolId: string; status: 'SUCCESS' | 'DENIED' | 'REQUIRES_CONFIRMATION' | 'ERROR'; content: string; authorizationResult: string; confirmationRequired: boolean; }
+export interface ConversationSnapshot { id: string; messages: AIMessage[]; status: 'IDLE' | 'GENERATING' | 'AWAITING_CONFIRMATION' | 'ERROR'; provider: string; model: string; lastError?: AIErrorCode; lastLatencyMs?: number; pendingTool?: ToolRequest; lastToolResult?: ToolResult; }
+export interface ConversationStartResult { conversationId: string; snapshot: ConversationSnapshot; }
+export interface AIConversationBridge { start: () => Promise<ConversationStartResult>; send: (conversationId: string, content: string) => Promise<ConversationSnapshot>; cancel: (conversationId: string) => Promise<void>; confirmTool: (conversationId: string, requestId: string, approved: boolean) => Promise<ConversationSnapshot>; getConfig: () => Promise<AIProviderConfig>; getStatus: () => Promise<{ configured: boolean; provider: string; model: string }>; }

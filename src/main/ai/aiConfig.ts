@@ -1,0 +1,2 @@
+import type { AIProviderConfig } from '../../shared/aiTypes';
+export const aiConfig: AIProviderConfig = { provider: process.env.TESH_AI_PROVIDER ?? 'openai-compatible', model: process.env.TESH_AI_MODEL ?? 'gpt-4o-mini', endpoint: process.env.TESH_AI_ENDPOINT ?? 'https://api.openai.com/v1/chat/completions', temperature: 0.4, maxOutputTokens: 800, streaming: false, timeoutMs: 30000 };
