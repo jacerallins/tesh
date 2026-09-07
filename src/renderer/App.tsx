@@ -30,7 +30,10 @@ function FirstRunSetup({ onFinish }: { onFinish: () => void }): ReactElement {
   const next = (): void => setStep((current) => Math.min(current + 1, 7));
   const grantMicrophone = async (): Promise<void> => { try { await window.tesh?.permissions.grant('MICROPHONE', undefined, 'SESSION'); setMessage('Microphone permission recorded. Browser access will still be requested when listening starts.'); } catch { setMessage('Microphone permission could not be recorded.'); } };
   const titles = ['WELCOME TO TESH', 'Microphone setup', 'Speech recognition test', 'Wake-word setup', 'Set up my voice', 'AI provider setup', 'Optional filesystem', 'Capability summary'];
-  return <main className="setup-shell"><p className="panel-label">First-run setup · {step + 1} of 8</p><h1>{titles[step]}</h1>{step === 0 && <p>Let's get Tesh ready. Required permissions are requested explicitly and optional capabilities can be skipped.</p>}{step === 1 && <><p>Microphone access is required for listening. Tesh will not silently enable it.</p><button type="button" onClick={() => void grantMicrophone()}>Allow microphone permission</button><p>{message}</p></>}{step === 2 && <p>Speech recognition uses the browser provider. Test it later from Voice &amp; Wake; availability depends on Windows and the browser engine.</p>}{step === 3 && <p>Wake phrase: <strong>Tesh Pineapples</strong>. The current provider is development-only and is clearly labeled.</p>}{step === 4 && <p>Speaker verification is <strong>Development speaker verification</strong>. Real biometric verification is unavailable, so no production enrollment is claimed.</p>}{step === 5 && <p>AI is configured only when a provider credential exists in the main process. No API key is shown here.</p>}{step === 6 && <p>Filesystem access is optional and permission-scoped. No broad access is granted by default.</p>}{step === 7 && <p>Tesh is ready to return to its background assistant mode. Review detailed capability status in Settings.</p>}<div className="setup-actions"><button type="button" onClick={step === 7 ? onFinish : next}>{step === 7 ? 'Start using Tesh' : 'Continue'}</button>{step > 0 && step < 7 ? <button type="button" onClick={next}>Skip</button> : null}</div></main>;
+  const wakeDescription = import.meta.env.DEV ? 'The development wake-word provider is enabled for testing.' : 'Background wake-word detection is disabled until a production provider is configured.';
+  const identityDescription = import.meta.env.DEV ? 'Development speaker verification is enabled only for local testing.' : 'Production speaker verification is not configured. Tesh will fail closed rather than claim an identity it cannot verify.';
+  const aiDescription = 'Tesh supports online AI, a local OpenAI-compatible model server, or automatic online-to-local fallback. Credentials remain in the main process.';
+  return <main className="setup-shell"><p className="panel-label">First-run setup · {step + 1} of 8</p><h1>{titles[step]}</h1>{step === 0 && <p>Let's get Tesh ready. Required permissions are requested explicitly and optional capabilities can be skipped.</p>}{step === 1 && <><p>Microphone access is required for listening. Tesh will not silently enable it.</p><button type="button" onClick={() => void grantMicrophone()}>Allow microphone permission</button><p>{message}</p></>}{step === 2 && <p>Speech recognition uses the browser provider. Test it later from Voice &amp; Wake; availability depends on Windows and the browser engine.</p>}{step === 3 && <p>Wake phrase: <strong>Tesh Pineapples</strong>. {wakeDescription}</p>}{step === 4 && <p>{identityDescription}</p>}{step === 5 && <p>{aiDescription}</p>}{step === 6 && <p>Filesystem access is optional and permission-scoped. No broad access is granted by default.</p>}{step === 7 && <p>Tesh is ready to return to its background assistant mode. Review detailed capability status in Settings.</p>}<div className="setup-actions"><button type="button" onClick={step === 7 ? onFinish : next}>{step === 7 ? 'Start using Tesh' : 'Continue'}</button>{step > 0 && step < 7 ? <button type="button" onClick={next}>Skip</button> : null}</div></main>;
 }
 
 export function App(): ReactElement {
@@ -123,25 +126,11 @@ export function App(): ReactElement {
     <main className="shell">
       <header className="topbar">
         <div className="brand-mark" aria-label="Tesh">T</div>
-        <div>
-          <p className="eyebrow">Private intelligence</p>
-          <h1>Tesh</h1>
-        </div>
-        <div className="connection-status" aria-label="Connection status">
-          <span className="status-dot" />
-          <span>Local shell</span>
-        </div>
+        <div><p className="eyebrow">Private intelligence</p><h1>Tesh</h1></div>
+        <div className="connection-status" aria-label="Connection status"><span className="status-dot" /><span>Local shell</span></div>
         {import.meta.env.DEV ? <div className="connection-status" aria-label="Companion status"><span className={`status-dot ${companionConnected ? '' : 'status-dot-offline'}`} /><span>Tesh Companion {companionConnected ? 'Connected' : 'Offline'}</span></div> : null}
       </header>
-
-      <section className="workspace" aria-label="Tesh workspace">
-        <TeshCore state={visualState.state} audioAmplitude={visualState.audio.amplitude} />
-        <div className="state-readout">
-          <span className="state-label">{stateLabels[visualState.state]}</span>
-          <p aria-live="polite">{stateDescriptions[visualState.state]}</p>
-        </div>
-      </section>
-
+      <section className="workspace" aria-label="Tesh workspace"><TeshCore state={visualState.state} audioAmplitude={visualState.audio.amplitude} /><div className="state-readout"><span className="state-label">{stateLabels[visualState.state]}</span><p aria-live="polite">{stateDescriptions[visualState.state]}</p></div></section>
       {import.meta.env.DEV ? <TeshStateControls state={visualState.state} onChange={visualState.simulateState} onSimulate={visualState.simulateInteraction} /> : null}
       {import.meta.env.DEV ? <MemoryPanel /> : null}
       {import.meta.env.DEV ? <PermissionPanel /> : null}
@@ -153,18 +142,7 @@ export function App(): ReactElement {
       {import.meta.env.DEV ? <DiagnosticsPanel /> : null}
       {import.meta.env.DEV ? <CompanionPanel /> : null}
       <SettingsPanel voice={visualState.voice} snapshot={visualState.voiceSnapshot} runtimeStatus={runtimeStatus} conversationTimeout={conversationTimeout} onConversationTimeoutChange={setConversationTimeout} />
-
-      <footer className="status-panel">
-        <div>
-          <span className="panel-label">System</span>
-          <strong>Visual core online</strong>
-        </div>
-        <div>
-          <span className="panel-label">Runtime</span>
-          <strong>{runtimeStatus ? `${runtimeStatus.platform} · Electron` : window.tesh ? 'Connecting...' : 'Browser preview'}</strong>
-        </div>
-        <p className="scope-note">Capabilities are reported from current permissions and providers. Development mocks are labeled and never presented as production.</p>
-      </footer>
+      <footer className="status-panel"><div><span className="panel-label">System</span><strong>Visual core online</strong></div><div><span className="panel-label">Runtime</span><strong>{runtimeStatus ? `${runtimeStatus.platform} · Electron` : window.tesh ? 'Connecting...' : 'Browser preview'}</strong></div><p className="scope-note">Capabilities are reported from current permissions and providers. Development mocks are labeled and never presented as production.</p></footer>
     </main>
   );
 }
