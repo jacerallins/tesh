@@ -1,6 +1,6 @@
 import type { CompanionMessage } from './companionTypes';
 
-const messageTypes = ['PAIRING_CHALLENGE_REQUEST', 'PAIRING_CHALLENGE_RESPONSE', 'PAIR_REQUEST', 'PAIR_RESPONSE', 'AUTH_REQUEST', 'AUTH_RESPONSE', 'PING', 'PONG', 'STATE_UPDATE', 'COMMAND_REQUEST', 'COMMAND_RESPONSE', 'ERROR'] as const;
+const messageTypes = ['PAIRING_CHALLENGE_REQUEST', 'PAIRING_CHALLENGE_RESPONSE', 'PAIR_REQUEST', 'PAIR_RESPONSE', 'AUTH_REQUEST', 'AUTH_RESPONSE', 'PING', 'PONG', 'STATE_UPDATE', 'COMMAND_REQUEST', 'COMMAND_RESPONSE', 'SYNC_PUSH', 'SYNC_ACK', 'NOTIFICATION', 'ERROR'] as const;
 
 export function parseCompanionMessage(value: unknown): CompanionMessage {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Companion message is malformed.');
