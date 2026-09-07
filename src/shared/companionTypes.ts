@@ -1,6 +1,6 @@
 export type CompanionDeviceStatus = 'PENDING' | 'PAIRED' | 'CONNECTED' | 'DISCONNECTED' | 'REVOKED';
-export type CompanionMessageType = 'PAIRING_CHALLENGE_REQUEST' | 'PAIRING_CHALLENGE_RESPONSE' | 'PAIR_REQUEST' | 'PAIR_RESPONSE' | 'AUTH_REQUEST' | 'AUTH_RESPONSE' | 'PING' | 'PONG' | 'STATE_UPDATE' | 'COMMAND_REQUEST' | 'COMMAND_RESPONSE' | 'ERROR';
-export type CompanionPermission = 'COMPANION_VIEW_STATUS' | 'COMPANION_SEND_COMMAND' | 'COMPANION_RECEIVE_NOTIFICATIONS';
+export type CompanionMessageType = 'PAIRING_CHALLENGE_REQUEST' | 'PAIRING_CHALLENGE_RESPONSE' | 'PAIR_REQUEST' | 'PAIR_RESPONSE' | 'AUTH_REQUEST' | 'AUTH_RESPONSE' | 'PING' | 'PONG' | 'STATE_UPDATE' | 'COMMAND_REQUEST' | 'COMMAND_RESPONSE' | 'SYNC_PUSH' | 'SYNC_ACK' | 'NOTIFICATION' | 'ERROR';
+export type CompanionPermission = 'COMPANION_VIEW_STATUS' | 'COMPANION_SEND_COMMAND' | 'COMPANION_RECEIVE_NOTIFICATIONS' | 'COMPANION_SYNC_MEMORY' | 'COMPANION_SYNC_CONVERSATIONS' | 'COMPANION_SYNC_ROUTINES';
 export type CompanionPlatform = 'ANDROID' | 'IOS' | 'WINDOWS' | 'MACOS' | 'LINUX' | 'UNKNOWN';
 
 export interface CompanionDevice { id: string; name: string; platform: CompanionPlatform; deviceType: string; publicKey: string; status: CompanionDeviceStatus; createdAt: string; lastSeenAt?: string; permissions: CompanionPermission[]; revokedAt?: string; }
