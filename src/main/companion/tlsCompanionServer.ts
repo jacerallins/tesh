@@ -3,84 +3,41 @@ import tls from 'node:tls';
 import { readFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import type { AuditService } from '../auditService';
-import type { CompanionService } from './companionService';
+import type { CompanionMessage } from '../../shared/companionTypes';
+import type { MemoryService } from '../memory/memoryService';
+import type { ConversationService } from '../ai/conversationService';
+import type { RoutineService } from '../routines/routineService';
 import { parseCompanionMessage } from '../../shared/companionWire';
+import { CompanionService } from './companionService';
 
 export interface CompanionServerOptions { host?: string; port?: number; certificate: string; privateKey: string; idleTimeoutMs?: number; maxRequestsPerMinute?: number; }
+export interface CompanionRuntimeHandlers { memory?: MemoryService; conversation?: ConversationService; routines?: RoutineService; }
 
 export class TlsCompanionServer {
   private server?: tls.Server;
-  constructor(private readonly service: CompanionService, private readonly audit: AuditService) {}
-
+  constructor(private readonly service: CompanionService, private readonly audit: AuditService, private readonly handlers: CompanionRuntimeHandlers = {}) {}
   async start(options: CompanionServerOptions): Promise<AddressInfo> {
     if (!options.certificate || !options.privateKey) throw new Error('Companion TLS certificate and private key are required.');
-    const certificate = await this.readPem(options.certificate);
-    const privateKey = await this.readPem(options.privateKey);
-    const idleTimeoutMs = options.idleTimeoutMs ?? 60_000;
-    const maxRequests = options.maxRequestsPerMinute ?? 60;
-    this.server = tls.createServer({ cert: certificate, key: privateKey, minVersion: 'TLSv1.3' }, (socket) => {
-      let buffer = '';
-      let requests = 0;
-      let windowStarted = Date.now();
-      socket.setTimeout(idleTimeoutMs, () => socket.destroy());
-      socket.setEncoding('utf8');
-      socket.on('data', (chunk: string) => {
-        buffer += chunk;
-        if (buffer.length > 64 * 1024) { socket.destroy(); return; }
-        let newline = buffer.indexOf('\n');
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline);
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf('\n');
-          if (!line) continue;
-          if (Date.now() - windowStarted > 60_000) { requests = 0; windowStarted = Date.now(); }
-          if (++requests > maxRequests) { socket.write(`${JSON.stringify({ type: 'ERROR', error: 'Rate limit exceeded.' })}\n`); socket.destroy(); return; }
-          void this.handleLine(socket, line);
-        }
-      });
-      socket.on('close', () => this.audit.record('COMPANION_DISCONNECTED'));
-    });
-    await new Promise<void>((resolve, reject) => { this.server!.once('error', reject); this.server!.listen(options.port ?? 0, options.host ?? '127.0.0.1', () => resolve()); });
-    return this.server.address() as AddressInfo;
+    const certificate = await this.readPem(options.certificate); const privateKey = await this.readPem(options.privateKey); const idleTimeoutMs = options.idleTimeoutMs ?? 60_000; const maxRequests = options.maxRequestsPerMinute ?? 60;
+    this.server = tls.createServer({ cert: certificate, key: privateKey, minVersion: 'TLSv1.3' }, socket => { let buffer=''; let requests=0; let windowStarted=Date.now(); socket.setTimeout(idleTimeoutMs,()=>socket.destroy()); socket.setEncoding('utf8'); socket.on('data',(chunk:string)=>{buffer+=chunk;if(buffer.length>64*1024){socket.destroy();return;}let newline=buffer.indexOf('\n');while(newline>=0){const line=buffer.slice(0,newline);buffer=buffer.slice(newline+1);newline=buffer.indexOf('\n');if(!line)continue;if(Date.now()-windowStarted>60_000){requests=0;windowStarted=Date.now();}if(++requests>maxRequests){socket.write(`${JSON.stringify({type:'ERROR',error:'Rate limit exceeded.'})}\n`);socket.destroy();return;}void this.handleLine(socket,line);}});socket.on('close',()=>this.audit.record('COMPANION_DISCONNECTED')); });
+    await new Promise<void>((resolve,reject)=>{this.server!.once('error',reject);this.server!.listen(options.port??0,options.host??'127.0.0.1',()=>resolve());}); return this.server.address() as AddressInfo;
   }
-
-  private async readPem(value: string): Promise<string> { try { return await readFile(value, 'utf8'); } catch { return value; } }
-
-  private async handleLine(socket: tls.TLSSocket, line: string): Promise<void> {
-    let requestId: string = crypto.randomUUID();
-    let deviceId: string = 'unknown';
-    try {
-      const message = parseCompanionMessage(JSON.parse(line) as unknown);
-      requestId = message.requestId;
-      deviceId = message.deviceId;
-      if (message.type === 'PAIRING_CHALLENGE_REQUEST') {
-        const challenge = await this.service.createPairingChallenge();
-        socket.write(`${JSON.stringify({ messageId: crypto.randomUUID(), deviceId: 'desktop', type: 'PAIRING_CHALLENGE_RESPONSE', timestamp: new Date().toISOString(), requestId: message.requestId, payload: challenge })}\n`);
-        return;
-      }
-      if (message.type === 'PAIR_REQUEST') {
-        const device = await this.service.pair(message.payload as never);
-        socket.write(`${JSON.stringify({ messageId: crypto.randomUUID(), deviceId: device.id, type: 'PAIR_RESPONSE', timestamp: new Date().toISOString(), requestId: message.requestId, payload: device })}\n`);
-        return;
-      }
-      if (message.type === 'AUTH_REQUEST') {
-        const session = this.service.authenticate(message as never);
-        socket.write(`${JSON.stringify({ messageId: crypto.randomUUID(), deviceId: message.deviceId, type: 'AUTH_RESPONSE', timestamp: new Date().toISOString(), requestId: message.requestId, payload: session })}\n`);
-        return;
-      }
-      if (message.type === 'COMMAND_REQUEST') {
-        const command = message as typeof message & { payload: { sessionId: string; command: string; input?: unknown } };
-        if (command.payload.command !== 'get_tesh_status') throw new Error('Command is unavailable.');
-        const response = await this.service.handleCommand(command as never, async () => ({ connectionState: 'CONNECTED', interactionState: 'idle', companionConnection: 'CONNECTED' }));
-        socket.write(`${JSON.stringify(response)}\n`);
-        return;
-      }
-      this.service.validateIncoming(message);
-    } catch {
-      this.audit.record('COMPANION_AUTH_FAILED', deviceId);
-      socket.write(`${JSON.stringify({ messageId: crypto.randomUUID(), deviceId, type: 'ERROR', timestamp: new Date().toISOString(), requestId, payload: { error: 'Request rejected.' } })}\n`);
-    }
-  }
-
-  async stop(): Promise<void> { if (!this.server) return; await new Promise<void>(resolve => this.server!.close(() => resolve())); this.server = undefined; }
+  private async readPem(value:string):Promise<string>{try{return await readFile(value,'utf8');}catch{return value;}}
+  private response(socket:tls.TLSSocket,requestId:string,deviceId:string,type:string,payload:unknown):void{socket.write(`${JSON.stringify({messageId:crypto.randomUUID(),deviceId,type,timestamp:new Date().toISOString(),requestId,payload})}\n`);}
+  private async handleLine(socket:tls.TLSSocket,line:string):Promise<void>{let requestId:string=crypto.randomUUID();let deviceId='unknown';try{const message=parseCompanionMessage(JSON.parse(line) as unknown);requestId=message.requestId;deviceId=message.deviceId;
+    if(message.type==='PAIRING_CHALLENGE_REQUEST'){const challenge=await this.service.createPairingChallenge();this.response(socket,requestId,'desktop','PAIRING_CHALLENGE_RESPONSE',challenge);return;}
+    if(message.type==='PAIR_REQUEST'){const device=await this.service.pair(message.payload as never);this.response(socket,requestId,device.id,'PAIR_RESPONSE',device);return;}
+    if(message.type==='AUTH_REQUEST'){const session=this.service.authenticate(message as CompanionMessage<{nonce:string;signature:string}>);this.response(socket,requestId,message.deviceId,'AUTH_RESPONSE',session);return;}
+    if(message.type!=='COMMAND_REQUEST'){this.service.validateIncoming(message);return;}
+    const payload=message.payload as {sessionId?:unknown;command?:unknown;input?:Record<string,unknown>};
+    const sessionId=typeof payload.sessionId==='string'?payload.sessionId:''; const command=typeof payload.command==='string'?payload.command:''; const base={sessionId};
+    if(command==='get_tesh_status'){this.service.authorizeSync({...message,payload:base} as CompanionMessage<{sessionId:string}>,'COMPANION_VIEW_STATUS');this.response(socket,requestId,message.deviceId,'COMMAND_RESPONSE',{result:{connectionState:'CONNECTED',interactionState:'idle',companionConnection:'CONNECTED'}});return;}
+    if(command==='list_memories'){this.service.authorizeSync({...message,payload:base} as CompanionMessage<{sessionId:string}>,'COMPANION_SYNC_MEMORY');if(!this.handlers.memory)throw new Error('Memory sync is unavailable.');this.response(socket,requestId,message.deviceId,'COMMAND_RESPONSE',{result:await this.handlers.memory.listMemories({includeArchived:false,limit:100,offset:0})});return;}
+    if(command==='list_conversations'){this.service.authorizeSync({...message,payload:base} as CompanionMessage<{sessionId:string}>,'COMPANION_SYNC_CONVERSATIONS');if(!this.handlers.conversation)throw new Error('Conversation sync is unavailable.');this.response(socket,requestId,message.deviceId,'COMMAND_RESPONSE',{result:await this.handlers.conversation.list(50)});return;}
+    if(command==='list_routines'){this.service.authorizeSync({...message,payload:base} as CompanionMessage<{sessionId:string}>,'COMPANION_SYNC_ROUTINES');if(!this.handlers.routines)throw new Error('Routine sync is unavailable.');this.response(socket,requestId,message.deviceId,'COMMAND_RESPONSE',{result:await this.handlers.routines.list()});return;}
+    if(command==='get_conversation'){this.service.authorizeSync({...message,payload:base} as CompanionMessage<{sessionId:string}>,'COMPANION_SYNC_CONVERSATIONS');if(!this.handlers.conversation||typeof payload.input?.id!=='string')throw new Error('Conversation request is invalid.');this.response(socket,requestId,message.deviceId,'COMMAND_RESPONSE',{result:await this.handlers.conversation.get(payload.input.id)});return;}
+    if(command==='show_assistant'||command==='hide_assistant')throw new Error('Command is unavailable to companion clients.');
+    throw new Error('Command is unavailable.');
+  }catch{this.audit.record('COMPANION_AUTH_FAILED',deviceId);this.response(socket,requestId,deviceId,'ERROR',{error:'Request rejected.'});}}
+  async stop():Promise<void>{if(!this.server)return;await new Promise<void>(resolve=>this.server!.close(()=>resolve()));this.server=undefined;}
 }
