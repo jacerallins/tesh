@@ -9,20 +9,13 @@ export type AppState =
   | 'error'
   | 'offline';
 
-export interface RuntimeStatus {
-  platform: string;
-  appVersion: string;
-  isPackaged: boolean;
-}
+export interface RuntimeStatus { platform: string; appVersion: string; isPackaged: boolean; }
 
 export interface TeshBridge {
   getRuntimeStatus: () => Promise<RuntimeStatus>;
   assistant: {
-    show: () => void;
-    hide: () => void;
-    updateState: (state: string, amplitude: number) => void;
-    onActivate: (callback: () => void) => () => void;
-    onPause: (callback: (paused: boolean) => void) => () => void;
+    show: () => void; hide: () => void; updateState: (state: string, amplitude: number) => void;
+    onActivate: (callback: () => void) => () => void; onPause: (callback: (paused: boolean) => void) => () => void;
     onState: (callback: (state: { state: string; amplitude: number }) => void) => () => void;
   };
   voice?: import('./voice/nativeTypes').NativeWakeBridge;
@@ -33,4 +26,5 @@ export interface TeshBridge {
   communication: import('./communicationTypes').CommunicationBridge;
   diagnostics?: import('./diagnosticsTypes').DiagnosticsBridge;
   companion?: import('./companionTypes').CompanionBridge;
+  routines: import('./routineTypes').RoutineBridge;
 }
