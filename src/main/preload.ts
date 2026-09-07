@@ -7,7 +7,7 @@ const voiceBridge = {
   stop: () => ipcRenderer.invoke('voice:wake-stop'),
   sendAudio: (samples: ArrayBuffer, sampleRate: number) => ipcRenderer.invoke('voice:wake-audio', samples, sampleRate),
   onDetected: (callback: () => void) => { const listener = (): void => callback(); ipcRenderer.on('voice:wake-detected', listener); return () => ipcRenderer.removeListener('voice:wake-detected', listener); },
-  enrollSpeaker: (sampleCount = 3) => ipcRenderer.invoke('voice:speaker-enroll', sampleCount),
+  enrollSpeaker: (prompt = '', sampleCount = 1) => ipcRenderer.invoke('voice:speaker-enroll', prompt, sampleCount),
   verifySpeaker: () => ipcRenderer.invoke('voice:speaker-verify'),
   isSpeakerConfigured: () => ipcRenderer.invoke('voice:speaker-configured'),
   isSpeakerEnrolled: () => ipcRenderer.invoke('voice:speaker-enrolled'),
