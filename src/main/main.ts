@@ -41,23 +41,11 @@ let latestAssistantState = { state: 'idle', amplitude: 0 };
 const nativeWake = new NativeWakeWordService();
 const nativeSpeaker = new NativeSpeakerVerificationService();
 
-function createDashboardWindow(): BrowserWindow {
-  const window = new BrowserWindow({ width: 1200, height: 800, minWidth: 960, minHeight: 640, backgroundColor: '#101820', show: true, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') } });
-  if (isDevelopment) void window.loadURL('http://localhost:5173'); else void window.loadFile(path.join(__dirname, '../../dist/index.html'));
-  window.on('close', (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
-  window.on('closed', () => { dashboardWindow = undefined; }); dashboardWindow = window; return window;
-}
-function createOverlayWindow(): BrowserWindow {
-  const window = new BrowserWindow({ width: 360, height: 360, frame: false, transparent: true, hasShadow: false, resizable: false, movable: false, focusable: false, alwaysOnTop: false, skipTaskbar: true, show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') } });
-  if (isDevelopment) void window.loadURL('http://localhost:5173/?overlay=1'); else void window.loadFile(path.join(__dirname, '../../dist/index.html'), { query: { overlay: '1' } });
-  window.webContents.on('did-finish-load', () => window.webContents.send('assistant:state', latestAssistantState)); window.on('closed', () => { overlayWindow = undefined; assistantActive = false; }); return window;
-}
+function createDashboardWindow(): BrowserWindow { const window = new BrowserWindow({ width: 1200, height: 800, minWidth: 960, minHeight: 640, backgroundColor: '#101820', show: true, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') } }); if (isDevelopment) void window.loadURL('http://localhost:5173'); else void window.loadFile(path.join(__dirname, '../../dist/index.html')); window.on('close', (event) => { if (!quitting) { event.preventDefault(); window.hide(); } }); window.on('closed', () => { dashboardWindow = undefined; }); dashboardWindow = window; return window; }
+function createOverlayWindow(): BrowserWindow { const window = new BrowserWindow({ width: 360, height: 360, frame: false, transparent: true, hasShadow: false, resizable: false, movable: false, focusable: false, alwaysOnTop: false, skipTaskbar: true, show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') } }); if (isDevelopment) void window.loadURL('http://localhost:5173/?overlay=1'); else void window.loadFile(path.join(__dirname, '../../dist/index.html'), { query: { overlay: '1' } }); window.webContents.on('did-finish-load', () => window.webContents.send('assistant:state', latestAssistantState)); window.on('closed', () => { overlayWindow = undefined; assistantActive = false; }); return window; }
 function showAssistant(): void { dashboardWindow?.show(); overlayWindow ??= createOverlayWindow(); const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()); const bounds = overlayWindow.getBounds(); overlayWindow.setPosition(Math.round(display.bounds.x + (display.bounds.width - bounds.width) / 2), Math.round(display.bounds.y + (display.bounds.height - bounds.height) / 2)); assistantActive = true; overlayWindow.setAlwaysOnTop(true, 'floating'); overlayWindow.webContents.send('assistant:state', latestAssistantState); overlayWindow.showInactive(); }
 function hideAssistant(): void { assistantActive = false; overlayWindow?.setAlwaysOnTop(false); overlayWindow?.hide(); }
-function createTray(): void {
-  const icon = nativeImage.createFromDataURL('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="6" fill="%23101820"/><path d="M8 8h16v4H12v4h9v4h-9v4h12v4H8z" fill="%239ed8ce"/></svg>');
-  tray = new Tray(icon); tray.setToolTip('Tesh'); tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Activate Tesh', click: () => { showAssistant(); dashboardWindow?.webContents.send('assistant:activate'); } }, { label: 'Open Tesh Dashboard', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { label: 'Pause Voice Activation', type: 'checkbox', checked: false, click: (item) => dashboardWindow?.webContents.send('assistant:voice-pause', item.checked) }, { label: 'Settings', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { type: 'separator' }, { label: 'Quit Tesh', click: () => { quitting = true; app.quit(); } }])); tray.on('double-click', () => { dashboardWindow?.show(); dashboardWindow?.focus(); });
-}
+function createTray(): void { const icon = nativeImage.createFromDataURL('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="6" fill="%23101820"/><path d="M8 8h16v4H12v4h9v4h-9v4h12v4H8z" fill="%239ed8ce"/></svg>'); tray = new Tray(icon); tray.setToolTip('Tesh'); tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Activate Tesh', click: () => { showAssistant(); dashboardWindow?.webContents.send('assistant:activate'); } }, { label: 'Open Tesh Dashboard', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { label: 'Pause Voice Activation', type: 'checkbox', checked: false, click: (item) => dashboardWindow?.webContents.send('assistant:voice-pause', item.checked) }, { label: 'Settings', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { type: 'separator' }, { label: 'Quit Tesh', click: () => { quitting = true; app.quit(); } }])); tray.on('double-click', () => { dashboardWindow?.show(); dashboardWindow?.focus(); }); }
 
 ipcMain.handle('runtime:get-status', () => ({ platform: process.platform, appVersion: app.getVersion(), isPackaged: app.isPackaged }));
 ipcMain.handle('assistant:show', () => showAssistant()); ipcMain.handle('assistant:hide', () => hideAssistant());
@@ -67,12 +55,13 @@ ipcMain.handle('voice:wake-start', async (_event, phrase: string) => { await nat
 ipcMain.handle('voice:wake-stop', () => nativeWake.stop());
 ipcMain.handle('voice:wake-audio', (_event, samples: ArrayBuffer, sampleRate: number) => nativeWake.sendAudio(samples, sampleRate));
 ipcMain.handle('voice:speaker-configured', () => nativeSpeaker.isConfigured());
+ipcMain.handle('voice:speaker-enrolled', () => nativeSpeaker.isEnrolled());
 ipcMain.handle('voice:speaker-enroll', (_event, sampleCount?: number) => nativeSpeaker.enroll(sampleCount ?? 3));
 ipcMain.handle('voice:speaker-verify', () => nativeSpeaker.verify());
+ipcMain.handle('voice:speaker-clear', () => nativeSpeaker.clearEnrollment());
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.tesh.desktop');
-  memoryDatabase = initializeMemoryDatabase(path.join(app.getPath('userData'), 'tesh-memory.sqlite'));
+  app.setAppUserModelId('com.tesh.desktop'); memoryDatabase = initializeMemoryDatabase(path.join(app.getPath('userData'), 'tesh-memory.sqlite'));
   const audit = new AuditService(memoryDatabase.connection); const diagnostics = new DiagnosticsService(audit);
   const memoryService = new MemoryService(new MemoryRepository(memoryDatabase.connection), (event, memoryId) => { audit.record(event, memoryId); }); registerMemoryIpc(memoryService);
   const permissionService = new PermissionService(new PermissionRepository(memoryDatabase.connection), (event, permissionId) => { audit.record(event, permissionId); }); registerPermissionIpc(permissionService);
@@ -80,12 +69,10 @@ app.whenReady().then(() => {
   const files = new FileService(permissionService, () => developmentVerifiedSession, (event, resource) => audit.record(event, resource)); const system = new SystemService(app.getVersion(), permissionService, () => developmentVerifiedSession, (event) => audit.record(event));
   const memoryIntelligence = new MemoryIntelligenceService(memoryDatabase.connection, memoryService, permissionService, (event) => audit.record(event));
   const communication = new CommunicationService(new MockCommunicationProvider(), permissionService, () => developmentVerifiedSession, (event) => audit.record(event));
-  const aiProvider = new AIRouter(aiConfig, process.env.TESH_AI_API_KEY, () => diagnostics.shouldFail('AI'));
-  registerConversationIpc(new ConversationService(aiProvider, new ToolExecutor(files, system, communication), async (query) => { if (diagnostics.shouldFail('MEMORY')) throw new Error('Development memory failure.'); return memoryIntelligence.retrieveRelevant(query); }));
+  const aiProvider = new AIRouter(aiConfig, process.env.TESH_AI_API_KEY, () => diagnostics.shouldFail('AI')); registerConversationIpc(new ConversationService(aiProvider, new ToolExecutor(files, system, communication), async (query) => { if (diagnostics.shouldFail('MEMORY')) throw new Error('Development memory failure.'); return memoryIntelligence.retrieveRelevant(query); }));
   registerMemoryIntelligenceIpc(memoryIntelligence); registerCommunicationIpc(communication); registerDiagnosticsIpc(diagnostics, isDevelopment);
   const companion = new CompanionService(memoryDatabase.connection, audit, (command) => developmentVerifiedSession && permissionService.authorizeAction({ capabilityId: command === 'FILE_READ' ? 'file.read' : 'system.diagnostics', resource: 'companion' }).result === 'ALLOWED'); registerCompanionIpc(companion, isDevelopment);
   if (process.env.TESH_COMPANION_TLS_CERT && process.env.TESH_COMPANION_TLS_KEY) { const companionServer = new TlsCompanionServer(companion, audit); void companionServer.start({ certificate: process.env.TESH_COMPANION_TLS_CERT, privateKey: process.env.TESH_COMPANION_TLS_KEY, host: process.env.TESH_COMPANION_BIND_HOST ?? '127.0.0.1', port: Number(process.env.TESH_COMPANION_PORT ?? 0) }); }
   createTray(); createDashboardWindow(); if (isDevelopment) globalShortcut.register('CommandOrControl+Shift+Space', () => { showAssistant(); dashboardWindow?.webContents.send('assistant:activate'); }); app.on('activate', () => { dashboardWindow?.show(); });
 });
-
 app.on('will-quit', () => { quitting = true; globalShortcut.unregisterAll(); tray?.destroy(); void nativeWake.stop(); memoryDatabase?.close(); }); app.on('window-all-closed', () => {});
