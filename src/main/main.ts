@@ -26,6 +26,7 @@ import { registerDiagnosticsIpc } from './diagnosticsIpc';
 import { CompanionService } from './companion/companionService';
 import { registerCompanionIpc } from './companion/companionIpc';
 import { TlsCompanionServer } from './companion/tlsCompanionServer';
+import { NativeWakeWordService } from './voice/nativeWakeWordService';
 
 const isDevelopment = process.argv.includes('--dev');
 let memoryDatabase: ReturnType<typeof initializeMemoryDatabase> | undefined;
@@ -36,6 +37,7 @@ let tray: Tray | undefined;
 let assistantActive = false;
 let quitting = false;
 let latestAssistantState = { state: 'idle', amplitude: 0 };
+const nativeWake = new NativeWakeWordService();
 
 function createDashboardWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -52,12 +54,8 @@ function createDashboardWindow(): BrowserWindow {
       preload: path.join(__dirname, 'preload.js')
     }
   });
-
-  if (isDevelopment) {
-    void window.loadURL('http://localhost:5173');
-  } else {
-    void window.loadFile(path.join(__dirname, '../../dist/index.html'));
-  }
+  if (isDevelopment) void window.loadURL('http://localhost:5173');
+  else void window.loadFile(path.join(__dirname, '../../dist/index.html'));
   window.on('close', (event) => { if (!quitting) { event.preventDefault(); window.hide(); } });
   window.on('closed', () => { dashboardWindow = undefined; });
   dashboardWindow = window;
@@ -74,6 +72,7 @@ function createOverlayWindow(): BrowserWindow {
 }
 
 function showAssistant(): void {
+  dashboardWindow?.show();
   overlayWindow ??= createOverlayWindow();
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const bounds = overlayWindow.getBounds();
@@ -90,7 +89,7 @@ function createTray(): void {
   const icon = nativeImage.createFromDataURL('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="6" fill="%23101820"/><path d="M8 8h16v4H12v4h9v4h-9v4h12v4H8z" fill="%239ed8ce"/></svg>');
   tray = new Tray(icon);
   tray.setToolTip('Tesh');
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Activate Tesh', click: () => { dashboardWindow?.webContents.send('assistant:activate'); showAssistant(); } }, { label: 'Open Tesh Dashboard', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { label: 'Pause Voice Activation', type: 'checkbox', checked: false, click: (item) => dashboardWindow?.webContents.send('assistant:voice-pause', item.checked) }, { label: 'Settings', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { type: 'separator' }, { label: 'Quit Tesh', click: () => { quitting = true; app.quit(); } }]));
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Activate Tesh', click: () => { showAssistant(); dashboardWindow?.webContents.send('assistant:activate'); } }, { label: 'Open Tesh Dashboard', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { label: 'Pause Voice Activation', type: 'checkbox', checked: false, click: (item) => dashboardWindow?.webContents.send('assistant:voice-pause', item.checked) }, { label: 'Settings', click: () => { dashboardWindow?.show(); dashboardWindow?.focus(); } }, { type: 'separator' }, { label: 'Quit Tesh', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', () => { dashboardWindow?.show(); dashboardWindow?.focus(); });
 }
 
@@ -98,6 +97,10 @@ ipcMain.handle('runtime:get-status', () => ({ platform: process.platform, appVer
 ipcMain.handle('assistant:show', () => showAssistant());
 ipcMain.handle('assistant:hide', () => hideAssistant());
 ipcMain.handle('assistant:update-state', (_event, value: { state: string; amplitude: number }) => { latestAssistantState = value; overlayWindow?.webContents.send('assistant:state', value); if (assistantActive && value.state === 'idle') setTimeout(hideAssistant, 900); });
+ipcMain.handle('voice:native-status', () => ({ available: nativeWake.isConfigured(), engine: nativeWake.isConfigured() ? 'openwakeword' : 'unknown', message: nativeWake.isConfigured() ? 'Native wake-word bridge configured.' : 'Set TESH_WAKEWORD_SCRIPT and TESH_WAKEWORD_MODEL.' }));
+ipcMain.handle('voice:wake-start', async (_event, phrase: string) => { nativeWake.removeAllListeners?.(); await nativeWake.start(phrase); nativeWake.onDetected(() => dashboardWindow?.webContents.send('voice:wake-detected')); });
+ipcMain.handle('voice:wake-stop', () => nativeWake.stop());
+ipcMain.handle('voice:wake-audio', (_event, samples: ArrayBuffer, sampleRate: number) => nativeWake.sendAudio(samples, sampleRate));
 
 app.whenReady().then(() => {
   app.setAppUserModelId('com.tesh.desktop');
@@ -133,5 +136,5 @@ app.whenReady().then(() => {
   app.on('activate', () => { dashboardWindow?.show(); });
 });
 
-app.on('will-quit', () => { quitting = true; globalShortcut.unregisterAll(); tray?.destroy(); memoryDatabase?.close(); });
+app.on('will-quit', () => { quitting = true; globalShortcut.unregisterAll(); tray?.destroy(); void nativeWake.stop(); memoryDatabase?.close(); });
 app.on('window-all-closed', () => {});
