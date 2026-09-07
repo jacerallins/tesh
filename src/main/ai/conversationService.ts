@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AIConversationBridge, AIMessage, AIProviderConfig, ConversationSnapshot, ConversationStartResult, ToolRequest } from '../../shared/aiTypes';
 import { buildContext } from './contextManager';
-import { aiConfig } from './aiConfig';
 import { TESH_SYSTEM_PROMPT } from './systemPrompt';
 import type { AIProvider, AIProviderError } from './aiProvider';
 import { toolDefinitions, ToolExecutor } from './toolExecutor';
@@ -41,7 +40,7 @@ export class ConversationService implements AIConversationBridge {
   }
   async cancel(conversationId: string): Promise<void> { this.controllers.get(conversationId)?.abort(); this.provider.cancel(); const conversation = this.get(conversationId); conversation.status = 'ERROR'; conversation.lastError = 'AI_CANCELLED'; }
   async confirmTool(conversationId: string, requestId: string, approved: boolean): Promise<ConversationSnapshot> { const conversation = this.get(conversationId); const request = conversation.pendingTool; if (!request || request.id !== requestId) throw new Error('Tool confirmation is invalid.'); if (!approved) { conversation.pendingTool = undefined; conversation.status = 'IDLE'; conversation.lastToolResult = { requestId, toolId: request.toolId, status: 'DENIED', content: 'User did not approve the tool request.', authorizationResult: 'DENIED', confirmationRequired: true }; return conversation; } const result = await this.tools.execute(request, true); conversation.pendingTool = undefined; conversation.lastToolResult = result; conversation.status = 'IDLE'; conversation.messages.push({ id: randomUUID(), role: 'TOOL', content: result.content, timestamp: new Date().toISOString(), toolCallId: request.id, toolName: request.toolId }); return conversation; }
-  async getConfig(): Promise<AIProviderConfig> { return { ...this.provider.config, ...aiConfig, provider: this.provider.config.provider }; }
+  async getConfig(): Promise<AIProviderConfig> { return { ...this.provider.config }; }
   async getStatus(): Promise<{ configured: boolean; provider: string; model: string }> { return { configured: this.provider.configured ?? Boolean(process.env.TESH_AI_API_KEY), provider: this.provider.name, model: this.provider.config.model }; }
   private completeResponse(conversation: ConversationSnapshot, content: string): ConversationSnapshot { conversation.messages.push({ id: randomUUID(), role: 'ASSISTANT', content, timestamp: new Date().toISOString() }); conversation.status = 'IDLE'; return conversation; }
   private get(id: string): ConversationSnapshot { const conversation = this.conversations.get(id); if (!conversation) throw new Error('Conversation was not found.'); return conversation; }
