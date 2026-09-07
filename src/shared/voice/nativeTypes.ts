@@ -10,7 +10,7 @@ export interface NativeWakeBridge {
   stop: () => Promise<void>;
   sendAudio: (samples: ArrayBuffer, sampleRate: number) => Promise<void>;
   onDetected: (callback: () => void) => () => void;
-  enrollSpeaker: (sampleCount?: number) => Promise<void>;
+  enrollSpeaker: (prompt?: string, sampleCount?: number) => Promise<void>;
   verifySpeaker: () => Promise<NativeSpeakerAttempt>;
   isSpeakerConfigured: () => Promise<boolean>;
   isSpeakerEnrolled: () => Promise<boolean>;
