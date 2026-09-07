@@ -34,8 +34,7 @@
     "electron-builder": "^26.15.3",
     "typescript": "latest",
     "vitest": "latest",
-    "wait-on": "latest",
-    "electron-builder": "^26.0.12"
+    "wait-on": "latest"
   },
   "build": {
     "appId": "com.tesh.desktop",
