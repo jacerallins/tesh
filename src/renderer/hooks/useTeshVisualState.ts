@@ -1,18 +1,18 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { AudioState, PermissionRequest, TeshApplicationError, TransitionResult } from '../engine/teshInteractionTypes';
 import type { TeshVisualState } from '../state/teshVisualState';
 import { TeshInteractionEngine } from '../engine/teshInteractionEngine';
-import type { AudioState, PermissionRequest, TeshApplicationError, TransitionResult } from '../engine/teshInteractionTypes';
 import { MicrophoneService } from '../services/voice/microphoneService';
 import { BrowserSpeechRecognitionProvider } from '../services/voice/speechRecognitionProvider';
 import { BrowserTTSProvider } from '../services/voice/ttsProvider';
 import { VoiceController } from '../services/voice/voiceController';
 import { DevelopmentSpeakerVerificationProvider } from '../services/voice/speakerVerificationProvider';
-import { ProductionSpeakerVerificationProvider } from '../services/voice/productionSpeakerVerificationProvider';
 import { NativeSpeakerVerificationProvider } from '../services/voice/nativeSpeakerVerificationProvider';
+import { ProductionSpeakerVerificationProvider } from '../services/voice/productionSpeakerVerificationProvider';
 import { DevelopmentWakeWordProvider, WakeWordService } from '../services/voice/wakeWordService';
-import { ProductionWakeWordProvider } from '../services/voice/productionWakeWordProvider';
 import { NativeWakeWordProvider } from '../services/voice/nativeWakeWordProvider';
+import { ProductionWakeWordProvider } from '../services/voice/productionWakeWordProvider';
 import { VoiceActivationService } from '../services/voice/voiceActivationService';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 export interface TeshVisualStateController {
   state: TeshVisualState; sessionId?: string; audio: AudioState;
@@ -27,9 +27,11 @@ export function useTeshVisualState(initialState: TeshVisualState = 'idle'): Tesh
   const [voice] = useState(() => new VoiceController(engine, new MicrophoneService(() => window.tesh?.permissions), new BrowserSpeechRecognitionProvider(), new BrowserTTSProvider()));
   const voiceSnapshot = useSyncExternalStore((listener) => voice.subscribe(listener), () => voice.getSnapshot(), () => voice.getSnapshot());
   const [activation] = useState(() => {
-    const useNative = import.meta.env.VITE_TESH_NATIVE_VOICE === 'true';
-    const wakeProvider = useNative ? new NativeWakeWordProvider('Tesh Pineapples') : (import.meta.env.DEV ? new DevelopmentWakeWordProvider('Tesh Pineapples') : new ProductionWakeWordProvider('Tesh Pineapples'));
-    const speakerProvider = useNative ? new NativeSpeakerVerificationProvider() : (import.meta.env.DEV ? new DevelopmentSpeakerVerificationProvider() : new ProductionSpeakerVerificationProvider());
+    const phrase = import.meta.env.VITE_TESH_WAKE_PHRASE ?? 'Tesh';
+    const useNative = !import.meta.env.DEV || import.meta.env.VITE_TESH_NATIVE_VOICE === 'true';
+    const wakeProvider = useNative ? new NativeWakeWordProvider(phrase) : new DevelopmentWakeWordProvider(phrase);
+    const speakerProvider = useNative ? new NativeSpeakerVerificationProvider() : new DevelopmentSpeakerVerificationProvider();
+    if (import.meta.env.PROD && !useNative) return new VoiceActivationService(engine, voice, new WakeWordService(new ProductionWakeWordProvider(phrase)), new ProductionSpeakerVerificationProvider());
     return new VoiceActivationService(engine, voice, new WakeWordService(wakeProvider), speakerProvider);
   });
   const activationSnapshot = useSyncExternalStore((listener) => activation.subscribe(listener), () => activation.getSnapshot(), () => activation.getSnapshot());
