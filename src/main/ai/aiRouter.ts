@@ -34,7 +34,7 @@ export class AIRouter implements AIProvider {
     this.online = new OpenAICompatibleProvider(onlineConfig, apiKey, shouldFail);
     this.offline = new OpenAICompatibleProvider(localConfig(), '', () => false);
     this.config = this.mode === 'offline' ? this.offline.config : { ...onlineConfig, provider: 'hybrid' };
-    this.configured = this.mode === 'offline' || Boolean(apiKey);
+    this.configured = this.mode !== 'online' || Boolean(apiKey);
   }
 
   async generate(messages: AIMessage[], tools: ToolDefinition[], signal?: AbortSignal): Promise<AIProviderResponse> {
