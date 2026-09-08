@@ -18,6 +18,13 @@ const bridge: TeshBridge = {
     onFinal: (callback) => { const listener = (_event: Electron.IpcRendererEvent, transcript: string): void => callback(transcript); ipcRenderer.on('voice:native-final', listener); return () => ipcRenderer.removeListener('voice:native-final', listener); },
     onError: (callback) => { const listener = (_event: Electron.IpcRendererEvent, message: string): void => callback(message); ipcRenderer.on('voice:native-error', listener); return () => ipcRenderer.removeListener('voice:native-error', listener); }
   },
+  speakerVerification: {
+    isConfigured: () => ipcRenderer.invoke('voice:speaker-configured'),
+    isEnrolled: () => ipcRenderer.invoke('voice:speaker-enrolled'),
+    enrollFromFiles: () => ipcRenderer.invoke('voice:speaker-enroll-files'),
+    clearEnrollment: () => ipcRenderer.invoke('voice:speaker-clear'),
+    verify: () => ipcRenderer.invoke('voice:speaker-verify')
+  },
   memory: {
     create: (input) => ipcRenderer.invoke('memory:create', input), get: (id) => ipcRenderer.invoke('memory:get', id), update: (id, input) => ipcRenderer.invoke('memory:update', id, input), delete: (id) => ipcRenderer.invoke('memory:delete', id), list: (options) => ipcRenderer.invoke('memory:list', options), search: (options) => ipcRenderer.invoke('memory:search', options), archive: (id) => ipcRenderer.invoke('memory:archive', id), restore: (id) => ipcRenderer.invoke('memory:restore', id),
     intelligence: { createCandidate: (input, privacy) => ipcRenderer.invoke('memory:candidate-create', input, privacy), listCandidates: () => ipcRenderer.invoke('memory:candidates'), approveCandidate: (id) => ipcRenderer.invoke('memory:candidate-approve', id), rejectCandidate: (id) => ipcRenderer.invoke('memory:candidate-reject', id), retrieveRelevant: (query) => ipcRenderer.invoke('memory:retrieve-relevant', query), createStyleProfile: (input) => ipcRenderer.invoke('memory:style-create', input), listStyleProfiles: () => ipcRenderer.invoke('memory:styles') }
