@@ -17,6 +17,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tesh.ios
         SWIFT_VERSION: 5.9
+        GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: Tesh uses your microphone for voice interaction when you enable it.
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Tesh uses the local network to securely connect to your trusted Tesh desktop.
     scheme:
