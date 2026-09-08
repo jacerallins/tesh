@@ -50,6 +50,7 @@ export interface WakeWordProvider {
 export interface SpeechRecognitionProvider {
   readonly name: string;
   readonly networkBehavior: string;
+  readonly usesSystemMicrophone: boolean;
   start(): Promise<void>;
   stop(): Promise<void>;
   cancel(): Promise<void>;
