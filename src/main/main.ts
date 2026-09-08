@@ -27,6 +27,7 @@ import { registerDiagnosticsIpc } from './diagnosticsIpc';
 import { CompanionService } from './companion/companionService';
 import { registerCompanionIpc } from './companion/companionIpc';
 import { TlsCompanionServer } from './companion/tlsCompanionServer';
+import { registerNativeVoiceIpc } from './voice/nativeVoiceIpc';
 
 const isDevelopment = process.argv.includes('--dev');
 let memoryDatabase: ReturnType<typeof initializeMemoryDatabase> | undefined;
@@ -38,6 +39,7 @@ let assistantActive = false;
 let quitting = false;
 let latestAssistantState = { state: 'idle', amplitude: 0 };
 let nativeSpeechProcess: ChildProcessWithoutNullStreams | undefined;
+let disposeNativeVoiceIpc: (() => void) | undefined;
 
 function nativeSpeechScriptPath(): string {
   return isDevelopment ? path.join(__dirname, '../../scripts/windows_speech.ps1') : path.join(process.resourcesPath, 'scripts/windows_speech.ps1');
@@ -153,10 +155,11 @@ app.whenReady().then(() => {
   registerCompanionIpc(companion, isDevelopment);
   if (process.env.TESH_COMPANION_TLS_CERT && process.env.TESH_COMPANION_TLS_KEY) { const companionServer = new TlsCompanionServer(companion, audit); void companionServer.start({ certificate: process.env.TESH_COMPANION_TLS_CERT, privateKey: process.env.TESH_COMPANION_TLS_KEY, host: process.env.TESH_COMPANION_BIND_HOST ?? '127.0.0.1', port: Number(process.env.TESH_COMPANION_PORT ?? 0) }); }
   createTray();
+  disposeNativeVoiceIpc = registerNativeVoiceIpc(() => dashboardWindow);
   createDashboardWindow();
   if (isDevelopment) globalShortcut.register('CommandOrControl+Shift+Space', () => { showAssistant(); dashboardWindow?.webContents.send('assistant:activate'); });
   app.on('activate', () => { dashboardWindow?.show(); });
 });
 
-app.on('will-quit', () => { quitting = true; stopNativeSpeech(); globalShortcut.unregisterAll(); tray?.destroy(); memoryDatabase?.close(); });
+app.on('will-quit', () => { quitting = true; stopNativeSpeech(); disposeNativeVoiceIpc?.(); globalShortcut.unregisterAll(); tray?.destroy(); memoryDatabase?.close(); });
 app.on('window-all-closed', () => {});
