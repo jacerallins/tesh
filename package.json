@@ -39,7 +39,7 @@
   "build": {
     "appId": "com.tesh.desktop",
     "productName": "Tesh",
-    "files": ["dist/**", "dist-electron/**", "package.json"],
+    "files": ["dist/**", "dist-electron/**", "scripts/**", "package.json"],
     "win": { "target": "nsis" },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
   }
