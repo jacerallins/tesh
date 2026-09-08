@@ -41,4 +41,11 @@ jobs:
         run: xcodegen generate
       - name: Build iOS companion without signing
         working-directory: apps/ios
-        run: xcodebuild -project Tesh.xcodeproj -scheme Tesh -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+        run: set -o pipefail && xcodebuild -project Tesh.xcodeproj -scheme Tesh -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
+      - name: Upload iOS build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcodebuild-log
+          path: apps/ios/xcodebuild.log
+          if-no-files-found: warn
