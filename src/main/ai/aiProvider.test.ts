@@ -4,9 +4,14 @@ import { OpenAICompatibleProvider } from './aiProvider';
 const config = { provider: 'test', model: 'test', endpoint: 'http://localhost', temperature: 0, maxOutputTokens: 10, streaming: false, timeoutMs: 1000 } as const;
 
 describe('OpenAICompatibleProvider', () => {
-  it('fails closed when the main-process API key is unavailable', async () => {
-    const provider = new OpenAICompatibleProvider(config, undefined);
+  it('fails closed when a remote provider API key is unavailable', async () => {
+    const provider = new OpenAICompatibleProvider({ ...config, endpoint: 'https://api.example.com/v1/chat/completions' }, undefined);
     await expect(provider.generate([], [])).rejects.toMatchObject({ code: 'AI_PROVIDER_UNAVAILABLE' });
+  });
+
+  it('allows keyless localhost providers for offline AI', () => {
+    const provider = new OpenAICompatibleProvider(config, undefined);
+    expect(provider.configured).toBe(true);
   });
 
   it('cancels all active requests without cross-request controller interference', async () => {
