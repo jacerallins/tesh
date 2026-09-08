@@ -96,7 +96,7 @@ export function App(): ReactElement {
         await visualState.voice.speak(response);
       }
     })();
-  }, [visualState.voiceSnapshot.finalTranscript, visualState.voice, visualState]);
+  }, [visualState.voiceSnapshot.finalTranscript, visualState.voice, visualState.beginProcessing, visualState.error, visualState.requestPermission, visualState.beginThinking]);
 
   if (!setupComplete) return <FirstRunSetup onFinish={() => { localStorage.setItem('tesh.setup.completed', 'true'); setSetupComplete(true); }} />;
 
