@@ -63,7 +63,7 @@ export class VoiceActivationService {
     if (this.sessionTimer) clearTimeout(this.sessionTimer);
     this.sessionTimer = setTimeout(() => this.expireSession(), this.config.sessionTimeoutMs);
     this.engine.activate();
-    window.tesh?.assistant.show();
+    if (typeof window !== 'undefined') window.tesh?.assistant.show();
     this.notify();
     await this.voice.startListening();
   }
@@ -72,7 +72,7 @@ export class VoiceActivationService {
   async clearEnrollment(): Promise<void> { await this.speaker.removeEnrollment(); await this.voice.stopListening(); this.clearSession(); this.snapshot = { ...this.snapshot, phase: 'IDLE', enrollment: 'NOT_ENROLLED', lastResult: undefined, attemptsRemaining: this.config.failedAttemptLimit }; this.failureCount = 0; this.backoffUntil = 0; this.notify(); }
   setMockResult(result: VerificationResult, liveness: 'PASS' | 'FAIL' | 'UNAVAILABLE' = 'UNAVAILABLE', confidence = 1): void { const provider = this.speaker as { setNextAttempt?: (attempt: { result: VerificationResult; liveness: 'PASS' | 'FAIL' | 'UNAVAILABLE'; confidence: number; method: string }) => void }; provider.setNextAttempt?.({ result, liveness, confidence, method: this.speaker.name }); }
   private silentFailure(result: VerificationResult): void { this.failureCount += 1; const blocked = this.failureCount >= this.config.failedAttemptLimit; this.backoffUntil = blocked ? Date.now() + this.config.backoffMs : 0; this.snapshot = { ...this.snapshot, phase: blocked ? 'BACKOFF' : 'IDLE', lastResult: result, attemptsRemaining: Math.max(0, this.config.failedAttemptLimit - this.failureCount), session: undefined }; this.engine.reset(); this.notify(); }
-  private expireSession(): void { void this.voice.stopListening(); this.clearSession(); this.snapshot = { ...this.snapshot, phase: 'IDLE', lastResult: undefined }; this.engine.reset(); window.tesh?.assistant.hide(); this.notify(); }
+  private expireSession(): void { void this.voice.stopListening(); this.clearSession(); this.snapshot = { ...this.snapshot, phase: 'IDLE', lastResult: undefined }; this.engine.reset(); if (typeof window !== 'undefined') window.tesh?.assistant.hide(); this.notify(); }
   private clearSession(): void { if (this.sessionTimer) clearTimeout(this.sessionTimer); this.sessionTimer = undefined; this.snapshot = { ...this.snapshot, session: undefined, attemptsRemaining: this.config.failedAttemptLimit }; }
   private notify(): void { this.listeners.forEach((listener) => listener()); }
 }
