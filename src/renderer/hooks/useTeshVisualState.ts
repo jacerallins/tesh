@@ -4,6 +4,7 @@ import { TeshInteractionEngine } from '../engine/teshInteractionEngine';
 import type { AudioState, PermissionRequest, TeshApplicationError, TransitionResult } from '../engine/teshInteractionTypes';
 import { MicrophoneService } from '../services/voice/microphoneService';
 import { BrowserSpeechRecognitionProvider } from '../services/voice/speechRecognitionProvider';
+import { NativeWindowsSpeechRecognitionProvider } from '../services/voice/nativeSpeechRecognitionProvider';
 import { BrowserTTSProvider } from '../services/voice/ttsProvider';
 import { VoiceController } from '../services/voice/voiceController';
 import { DevelopmentSpeakerVerificationProvider } from '../services/voice/speakerVerificationProvider';
@@ -44,9 +45,14 @@ export function useTeshVisualState(initialState: TeshVisualState = 'idle'): Tesh
   const subscribe = (listener: () => void): (() => void) => engine.subscribe(listener);
   const getSnapshot = (): ReturnType<TeshInteractionEngine['getContext']> => engine.getContext();
   const context = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const [voice] = useState(() => new VoiceController(engine, new MicrophoneService(() => window.tesh?.permissions), new BrowserSpeechRecognitionProvider(), new BrowserTTSProvider()));
+  const [voice] = useState(() => {
+    const recognition = window.tesh?.nativeSpeech
+      ? new NativeWindowsSpeechRecognitionProvider()
+      : new BrowserSpeechRecognitionProvider();
+    return new VoiceController(engine, new MicrophoneService(() => window.tesh?.permissions), recognition, new BrowserTTSProvider());
+  });
   const voiceSnapshot = useSyncExternalStore((listener) => voice.subscribe(listener), () => voice.getSnapshot(), () => voice.getSnapshot());
-  const [activation] = useState(() => new VoiceActivationService(engine, voice, new WakeWordService(new DevelopmentWakeWordProvider('Tesh Pineapples')), new DevelopmentSpeakerVerificationProvider()));
+  const [activation] = useState(() => new VoiceActivationService(engine, voice, new WakeWordService(new DevelopmentWakeWordProvider('Tesh')), new DevelopmentSpeakerVerificationProvider()));
   const activationSnapshot = useSyncExternalStore((listener) => activation.subscribe(listener), () => activation.getSnapshot(), () => activation.getSnapshot());
   useEffect(() => {
     const cleanup = (): void => { void activation.stop(); void voice.dispose(); };
@@ -55,27 +61,7 @@ export function useTeshVisualState(initialState: TeshVisualState = 'idle'): Tesh
   }, [activation, voice]);
 
   return {
-    state: context.state,
-    sessionId: context.sessionId,
-    audio: context.audio,
-    activate: engine.activate.bind(engine),
-    beginListening: engine.beginListening.bind(engine),
-    stopListening: engine.stopListening.bind(engine),
-    beginThinking: engine.beginThinking.bind(engine),
-    beginProcessing: engine.beginProcessing.bind(engine),
-    beginSpeaking: engine.beginSpeaking.bind(engine),
-    requestPermission: engine.requestPermission.bind(engine),
-    resolvePermission: engine.resolvePermission.bind(engine),
-    success: engine.success.bind(engine),
-    error: engine.error.bind(engine),
-    goOffline: engine.goOffline.bind(engine),
-    goOnline: engine.goOnline.bind(engine),
-    reset: engine.reset.bind(engine),
-    simulateInteraction: engine.simulateInteraction.bind(engine),
-    simulateState: engine.simulateState.bind(engine),
-    voice,
-    voiceSnapshot,
-    activation,
-    activationSnapshot
+    state: context.state, sessionId: context.sessionId, audio: context.audio,
+    activate: engine.activate.bind(engine), beginListening: engine.beginListening.bind(engine), stopListening: engine.stopListening.bind(engine), beginThinking: engine.beginThinking.bind(engine), beginProcessing: engine.beginProcessing.bind(engine), beginSpeaking: engine.beginSpeaking.bind(engine), requestPermission: engine.requestPermission.bind(engine), resolvePermission: engine.resolvePermission.bind(engine), success: engine.success.bind(engine), error: engine.error.bind(engine), goOffline: engine.goOffline.bind(engine), goOnline: engine.goOnline.bind(engine), reset: engine.reset.bind(engine), simulateInteraction: engine.simulateInteraction.bind(engine), simulateState: engine.simulateState.bind(engine), voice, voiceSnapshot, activation, activationSnapshot
   };
 }
