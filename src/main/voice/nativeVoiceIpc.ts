@@ -22,7 +22,7 @@ export function registerNativeVoiceIpc(dashboardWindow: () => BrowserWindow | un
   const speaker = new NativeSpeakerVerificationService({
     executable: process.env.TESH_SPEAKER_PYTHON ?? 'python',
     script: process.env.TESH_SPEAKER_SCRIPT ?? resourceScript('scripts/tesh_speaker.py'),
-    model: defaultModel('speaker.onnx', 'TESH_SPEAKER_MODEL'),
+    model: defaultModel('speaker.onnx', 'TESH_SPEAKER_MODEL') ?? '',
     profile: process.env.TESH_SPEAKER_PROFILE ?? path.join(app.getPath('userData'), 'voice', 'primary-speaker.json'),
   });
 
@@ -52,6 +52,5 @@ export function registerNativeVoiceIpc(dashboardWindow: () => BrowserWindow | un
     ipcMain.removeHandler('voice:speaker-enroll');
     ipcMain.removeHandler('voice:speaker-verify');
     ipcMain.removeHandler('voice:speaker-clear');
-    speaker.clearEnrollment().catch(() => undefined);
   };
 }
