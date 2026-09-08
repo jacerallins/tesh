@@ -1,8 +1,7 @@
 import type { TeshInteractionEngine } from '../../engine/teshInteractionEngine';
-import { TeshApplicationError } from '../../engine/teshInteractionTypes';
 import type { VoiceController } from './voiceController';
 import type { WakeWordService } from './wakeWordService';
-import type { SpeakerVerificationProvider, VerificationConfiguration, VerificationResult, VerifiedSession } from '../../../shared/voice';
+import type { SpeakerVerificationProvider, VerificationConfiguration, VerificationResult, VerifiedSession, PrimaryUserIdentity } from '../../../shared/voice';
 
 export interface ActivationSnapshot {
   phase: 'IDLE' | 'WAKE_DETECTED' | 'VERIFYING' | 'LISTENING' | 'BACKOFF';
@@ -28,14 +27,20 @@ export class VoiceActivationService {
   get wakePhrase(): string { return this.wake.phrase; }
   getSnapshot(): ActivationSnapshot { return this.snapshot; }
   subscribe(listener: Listener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  async start(): Promise<void> { await this.wake.start(); this.wakeUnsubscribe = this.wake.onWakeDetected(() => { void this.handleWakeDetected(); }); }
+  async start(): Promise<void> {
+    const identity = await this.speaker.getStatus();
+    this.snapshot = { ...this.snapshot, enrollment: identity?.enrollmentStatus ?? 'NOT_ENROLLED' };
+    this.notify();
+    await this.wake.start();
+    this.wakeUnsubscribe = this.wake.onWakeDetected(() => { void this.handleWakeDetected(); });
+  }
   async stop(): Promise<void> { this.wakeUnsubscribe?.(); this.wakeUnsubscribe = undefined; await this.wake.stop(); await this.voice.stopListening(); this.clearSession(); this.listeners.clear(); }
   async handleWakeDetected(): Promise<void> {
     if (this.snapshot.phase === 'VERIFYING' || this.snapshot.phase === 'LISTENING' || Date.now() < this.backoffUntil) return;
     this.snapshot = { ...this.snapshot, phase: 'WAKE_DETECTED' }; this.notify();
     const identity = await this.speaker.getStatus();
     if (!identity) return this.silentFailure('NO_ENROLLMENT');
-    this.snapshot = { ...this.snapshot, phase: 'VERIFYING' }; this.notify();
+    this.snapshot = { ...this.snapshot, phase: 'VERIFYING', enrollment: identity.enrollmentStatus }; this.notify();
     const attempt = await this.speaker.verify();
     const verified = attempt.result === 'VERIFIED' && (attempt.confidence === undefined || attempt.confidence >= this.config.confidenceThreshold) && attempt.liveness !== 'FAIL';
     if (!verified) return this.silentFailure(attempt.result === 'VERIFIED' ? 'NOT_VERIFIED' : attempt.result);
@@ -49,6 +54,20 @@ export class VoiceActivationService {
   }
   async simulateWakePhrase(): Promise<void> { await this.handleWakeDetected(); }
   async enrollTestIdentity(): Promise<void> { this.snapshot = { ...this.snapshot, enrollment: 'ENROLLING' }; this.notify(); const identity = await this.speaker.enroll(Array.from({ length: this.config.requiredEnrollmentSamples }, (_, index) => `development-sample-${index + 1}`)); this.snapshot = { ...this.snapshot, enrollment: identity.enrollmentStatus }; this.notify(); }
+  async enrollFromRecordings(): Promise<void> {
+    const provider = this.speaker as SpeakerVerificationProvider & { enrollFromRecordings?: () => Promise<PrimaryUserIdentity> };
+    if (!provider.enrollFromRecordings) throw new Error('Recording-based enrollment is unavailable for the current speaker provider.');
+    this.snapshot = { ...this.snapshot, enrollment: 'ENROLLING' }; this.notify();
+    try {
+      const identity = await provider.enrollFromRecordings();
+      this.snapshot = { ...this.snapshot, enrollment: identity.enrollmentStatus, phase: 'IDLE', lastResult: undefined };
+      this.notify();
+    } catch (error) {
+      this.snapshot = { ...this.snapshot, enrollment: 'NOT_ENROLLED', phase: 'IDLE' };
+      this.notify();
+      throw error;
+    }
+  }
   async clearEnrollment(): Promise<void> { await this.speaker.removeEnrollment(); this.clearSession(); this.snapshot = { ...this.snapshot, phase: 'IDLE', enrollment: 'NOT_ENROLLED', lastResult: undefined }; this.notify(); }
   setMockResult(result: VerificationResult, liveness: 'PASS' | 'FAIL' | 'UNAVAILABLE' = 'UNAVAILABLE', confidence = 1): void { const provider = this.speaker as { setNextAttempt?: (attempt: { result: VerificationResult; liveness: 'PASS' | 'FAIL' | 'UNAVAILABLE'; confidence: number; method: string }) => void }; provider.setNextAttempt?.({ result, liveness, confidence, method: this.speaker.name }); }
   private silentFailure(result: VerificationResult): void { this.failureCount += 1; const blocked = this.failureCount >= this.config.failedAttemptLimit; this.backoffUntil = blocked ? Date.now() + this.config.backoffMs : 0; this.snapshot = { ...this.snapshot, phase: blocked ? 'BACKOFF' : 'IDLE', lastResult: result, attemptsRemaining: Math.max(0, this.config.failedAttemptLimit - this.failureCount), session: undefined }; this.engine.reset(); this.notify(); }

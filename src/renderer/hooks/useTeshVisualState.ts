@@ -8,6 +8,7 @@ import { NativeWindowsSpeechRecognitionProvider } from '../services/voice/native
 import { BrowserTTSProvider } from '../services/voice/ttsProvider';
 import { VoiceController } from '../services/voice/voiceController';
 import { DevelopmentSpeakerVerificationProvider } from '../services/voice/speakerVerificationProvider';
+import { NativeSpeakerVerificationProvider } from '../services/voice/nativeSpeakerVerificationProvider';
 import { DevelopmentWakeWordProvider, WakeWordService } from '../services/voice/wakeWordService';
 import { VoiceActivationService } from '../services/voice/voiceActivationService';
 
@@ -52,7 +53,12 @@ export function useTeshVisualState(initialState: TeshVisualState = 'idle'): Tesh
     return new VoiceController(engine, new MicrophoneService(() => window.tesh?.permissions), recognition, new BrowserTTSProvider());
   });
   const voiceSnapshot = useSyncExternalStore((listener) => voice.subscribe(listener), () => voice.getSnapshot(), () => voice.getSnapshot());
-  const [activation] = useState(() => new VoiceActivationService(engine, voice, new WakeWordService(new DevelopmentWakeWordProvider('Tesh')), new DevelopmentSpeakerVerificationProvider()));
+  const [activation] = useState(() => {
+    const speaker = window.tesh?.speakerVerification
+      ? new NativeSpeakerVerificationProvider()
+      : new DevelopmentSpeakerVerificationProvider();
+    return new VoiceActivationService(engine, voice, new WakeWordService(new DevelopmentWakeWordProvider('Tesh')), speaker);
+  });
   const activationSnapshot = useSyncExternalStore((listener) => activation.subscribe(listener), () => activation.getSnapshot(), () => activation.getSnapshot());
   useEffect(() => {
     const cleanup = (): void => { void activation.stop(); void voice.dispose(); };

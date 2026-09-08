@@ -27,6 +27,8 @@ import { registerDiagnosticsIpc } from './diagnosticsIpc';
 import { CompanionService } from './companion/companionService';
 import { registerCompanionIpc } from './companion/companionIpc';
 import { TlsCompanionServer } from './companion/tlsCompanionServer';
+import { NativeSpeakerVerificationService } from './voice/nativeSpeakerVerificationService';
+import { registerSpeakerVerificationIpc } from './voice/speakerVerificationIpc';
 
 const isDevelopment = process.argv.includes('--dev');
 let memoryDatabase: ReturnType<typeof initializeMemoryDatabase> | undefined;
@@ -41,6 +43,10 @@ let nativeSpeechProcess: ChildProcessWithoutNullStreams | undefined;
 
 function nativeSpeechScriptPath(): string {
   return isDevelopment ? path.join(__dirname, '../../scripts/windows_speech.ps1') : path.join(process.resourcesPath, 'scripts/windows_speech.ps1');
+}
+
+function speakerScriptPath(): string {
+  return isDevelopment ? path.join(__dirname, '../../scripts/tesh_speaker.py') : path.join(process.resourcesPath, 'scripts/tesh_speaker.py');
 }
 
 function nativeSpeechAvailable(): boolean {
@@ -134,6 +140,12 @@ ipcMain.handle('voice:native-stop', () => { stopNativeSpeech(); });
 app.whenReady().then(() => {
   app.setAppUserModelId('com.tesh.desktop');
   memoryDatabase = initializeMemoryDatabase(path.join(app.getPath('userData'), 'tesh-memory.sqlite'));
+  const speakerVerification = new NativeSpeakerVerificationService({
+    script: speakerScriptPath(),
+    model: process.env.TESH_SPEAKER_MODEL ?? '',
+    profile: process.env.TESH_SPEAKER_PROFILE ?? path.join(app.getPath('userData'), 'voice', 'primary-user.json'),
+  });
+  registerSpeakerVerificationIpc(speakerVerification);
   const audit = new AuditService(memoryDatabase.connection);
   const diagnostics = new DiagnosticsService(audit);
   const memoryService = new MemoryService(new MemoryRepository(memoryDatabase.connection), (event, memoryId) => { audit.record(event, memoryId); });
