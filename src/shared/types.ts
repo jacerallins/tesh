@@ -15,6 +15,14 @@ export interface RuntimeStatus {
   isPackaged: boolean;
 }
 
+export interface NativeSpeechBridge {
+  isAvailable: () => Promise<boolean>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  onFinal: (callback: (transcript: string) => void) => () => void;
+  onError: (callback: (message: string) => void) => () => void;
+}
+
 export interface TeshBridge {
   getRuntimeStatus: () => Promise<RuntimeStatus>;
   assistant: {
@@ -25,6 +33,7 @@ export interface TeshBridge {
     onPause: (callback: (paused: boolean) => void) => () => void;
     onState: (callback: (state: { state: string; amplitude: number }) => void) => () => void;
   };
+  nativeSpeech?: NativeSpeechBridge;
   memory: import('./memoryTypes').MemoryBridge;
   permissions: import('./permissionTypes').PermissionBridge;
   system: import('./systemTypes').SystemToolsBridge;
