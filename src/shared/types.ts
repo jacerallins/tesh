@@ -23,6 +23,21 @@ export interface NativeSpeechBridge {
   onError: (callback: (message: string) => void) => () => void;
 }
 
+export interface NativeWakeWordBridge {
+  status: () => Promise<{ available: boolean; configured: boolean; running: boolean; phrase: string; modelPath?: string; error?: string }>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  onDetected: (callback: () => void) => () => void;
+  onError: (callback: (message: string) => void) => () => void;
+}
+
+export interface NativeSpeakerBridge {
+  status: () => Promise<{ configured: boolean; enrolled: boolean; profile: string }>;
+  enroll: (samples: number) => Promise<{ configured: boolean; enrolled: boolean; profile: string }>;
+  verify: () => Promise<{ result: 'VERIFIED' | 'NOT_VERIFIED' | 'VERIFICATION_UNAVAILABLE'; confidence?: number; liveness: 'PASS' | 'FAIL' | 'UNAVAILABLE'; method: string }>;
+  clear: () => Promise<{ configured: boolean; enrolled: boolean; profile: string }>;
+}
+
 export interface TeshBridge {
   getRuntimeStatus: () => Promise<RuntimeStatus>;
   assistant: {
@@ -34,6 +49,8 @@ export interface TeshBridge {
     onState: (callback: (state: { state: string; amplitude: number }) => void) => () => void;
   };
   nativeSpeech?: NativeSpeechBridge;
+  nativeWakeWord?: NativeWakeWordBridge;
+  nativeSpeaker?: NativeSpeakerBridge;
   memory: import('./memoryTypes').MemoryBridge;
   permissions: import('./permissionTypes').PermissionBridge;
   system: import('./systemTypes').SystemToolsBridge;
