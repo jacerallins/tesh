@@ -23,6 +23,14 @@ export interface NativeSpeechBridge {
   onError: (callback: (message: string) => void) => () => void;
 }
 
+export interface SpeakerVerificationBridge {
+  isConfigured: () => Promise<boolean>;
+  isEnrolled: () => Promise<boolean>;
+  enrollFromFiles: () => Promise<{ enrolled: boolean; message?: string }>;
+  clearEnrollment: () => Promise<void>;
+  verify: () => Promise<{ result: 'VERIFIED' | 'NOT_VERIFIED' | 'VERIFICATION_UNAVAILABLE'; confidence?: number; liveness: 'PASS' | 'FAIL' | 'UNAVAILABLE'; method: string }>;
+}
+
 export interface TeshBridge {
   getRuntimeStatus: () => Promise<RuntimeStatus>;
   assistant: {
@@ -34,6 +42,7 @@ export interface TeshBridge {
     onState: (callback: (state: { state: string; amplitude: number }) => void) => () => void;
   };
   nativeSpeech?: NativeSpeechBridge;
+  speakerVerification?: SpeakerVerificationBridge;
   memory: import('./memoryTypes').MemoryBridge;
   permissions: import('./permissionTypes').PermissionBridge;
   system: import('./systemTypes').SystemToolsBridge;
