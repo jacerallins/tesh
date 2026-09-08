@@ -5,8 +5,11 @@ export class NativeWakeWordProvider implements WakeWordProvider {
   private unsubscribe?: () => void;
 
   async start(): Promise<void> {
-    if (!window.tesh?.nativeWakeWord) throw new Error('Native Tesh wake-word bridge is unavailable.');
-    await window.tesh.nativeWakeWord.start();
+    const bridge = window.tesh?.nativeWakeWord;
+    if (!bridge) return;
+    const status = await bridge.status();
+    if (!status.available || !status.configured) return;
+    await bridge.start();
   }
 
   async stop(): Promise<void> {
